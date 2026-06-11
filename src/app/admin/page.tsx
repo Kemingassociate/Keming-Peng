@@ -29,7 +29,7 @@ export default function AdminPage() {
   type EditedQ = { text: string; answer: string };
   const [editedQuestions, setEditedQuestions] = useState<Record<string, EditedQ>>({});
 
-  // 处理 Word 上传并解析
+  // 处理文档上传并解析（支持 .docx 和 .xlsx）
   const handleWordFile = useCallback(async (file: File) => {
     setError("");
     setWordPreviewUrl(URL.createObjectURL(file));
@@ -196,52 +196,60 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Word 上传 */}
+            {/* 文档上传（Word / Excel）*/}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
               <div className="flex items-center gap-3 mb-5">
                 <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
                   <FileText className="w-5 h-5 text-blue-700" />
                 </div>
                 <div>
-                  <h2 className="font-semibold text-slate-800">Word 题目文档</h2>
-                  <p className="text-xs text-slate-400">.docx 格式，包含题目和答案</p>
+                  <h2 className="font-semibold text-slate-800">题目文档</h2>
+                  <p className="text-xs text-slate-400">支持 .docx 和 .xlsx 格式</p>
                 </div>
               </div>
 
               <UploadZone
-                accept=".docx"
+                accept=".docx,.xlsx,.xls"
                 icon={<FileText className="w-8 h-8 text-blue-400" />}
-                label="点击上传 Word 文档"
+                label="点击上传 Word 或 Excel 文档"
                 sublabel="或拖拽文件到此处"
                 onFile={handleWordFile}
               />
 
               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs text-slate-600 leading-relaxed space-y-2">
-                <p className="font-semibold text-blue-800">✅ 支持两种标准格式：</p>
+                <p className="font-semibold text-blue-800">📄 支持三种输入格式：</p>
                 <div>
-                  <p className="font-medium mb-1">格式一（推荐）：答案嵌在题下方</p>
+                  <p className="font-medium mb-1">格式一 — Excel 模板（推荐）</p>
+                  <div className="bg-white rounded-lg p-3 font-mono text-xs space-y-1">
+                    <div className="flex gap-2"><span className="w-6 text-slate-400">A</span>题型</div>
+                    <div className="flex gap-2"><span className="w-6 text-slate-400">B</span>Located at the 11__________ of Marion Street.</div>
+                    <div className="flex gap-2"><span className="w-6 text-slate-400">C~G</span>选项1 | 选项2 | 选项3 | 选项4 | 选项5</div>
+                    <div className="flex gap-2"><span className="w-6 text-slate-400">H</span>[答案：corner]</div>
+                  </div>
+                  <p className="mt-1 text-slate-500">每题一行，A 列题型、B 列题干（含编号空白）、H 列答案。</p>
+                </div>
+                <div>
+                  <p className="font-medium mb-1">格式二 — Word 内嵌答案</p>
                   <div className="bg-white rounded-lg p-3 font-mono text-xs space-y-1">
                     <div>Located at the 11__________ of Marion Street.</div>
                     <div className="text-green-700 font-bold">[答案：corner]</div>
                     <div>Monday-Friday 12__________am to 9.30 pm</div>
                     <div className="text-green-700 font-bold">[答案：6 OR six]</div>
                   </div>
-                  <p className="mt-1 text-slate-500">答案用 <code className="bg-slate-200 px-1 rounded">[答案：]</code> 标记，多个答案用 <code className="bg-slate-200 px-1 rounded">/</code> 或 <code className="bg-slate-200 px-1 rounded">OR</code> 分隔。</p>
+                  <p className="mt-1 text-slate-500">答案用 <code className="bg-slate-200 px-1 rounded">[答案：]</code> 标记紧跟题下方。</p>
                 </div>
                 <div>
-                  <p className="font-medium mb-1">格式二：末尾统一答案区</p>
+                  <p className="font-medium mb-1">格式三 — Word 末尾答案区</p>
                   <div className="bg-white rounded-lg p-3 font-mono text-xs space-y-1">
                     <div>Located at the 11__________ of Marion Street.</div>
                     <div>Monday-Friday 12__________am to 9.30 pm</div>
                     <div className="text-green-700 font-bold mt-2">答案：</div>
-                    <div>11 corner</div>
-                    <div>12 six</div>
+                    <div>11 corner / 12 six</div>
                   </div>
-                  <p className="mt-1 text-slate-500">答案放在文档最末尾，以 <code className="bg-slate-200 px-1 rounded">答案：</code> 开头，每行一个。</p>
                 </div>
                 <div className="pt-1 border-t border-blue-200">
                   <p className="font-medium">填空编号规则：</p>
-                  <p>用 <code className="bg-slate-200 px-1 rounded">11__________</code> 表示第 11 题下划线（5个下划线），编号从 1 开始连续，题目自动按每 10 题分一个 Part。</p>
+                  <p>用 <code className="bg-slate-200 px-1 rounded">11__________</code> 表示第 11 题（≥5个下划线），自动按每 10 题分一个 Part。</p>
                 </div>
               </div>
             </div>

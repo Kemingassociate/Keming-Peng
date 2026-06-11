@@ -1,7 +1,22 @@
 import JSZip from "jszip";
+import * as XLSX from "xlsx";
 import type { ParsedDoc, Question, ExamSection } from "@/types";
 
+/**
+ * 智能解析：自动识别 .docx 与 .xlsx，返回统一 ParsedDoc
+ */
 export async function parseDocx(file: File): Promise<ParsedDoc> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    return await parseExcel(file, name.endsWith(".xls"));
+  }
+  return await parseWordDocx(file);
+}
+
+// ============================================================
+// 从 Word .docx 解析
+// ============================================================
+async function parseWordDocx(file: File): Promise<ParsedDoc> {
   const arrayBuffer = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(arrayBuffer);
   const docXml = await zip.file("word/document.xml")?.async("string");
@@ -266,6 +281,84 @@ function tryParseFormatB(rawText: string): ParsedDoc {
     }
   }
   if (pendingQ) currentSection.questions.push(pendingQ);
+  return { title, sections };
+}
+
+// ============================================================
+// 从 Excel .xlsx / .xls 解析
+// 模板结构：题型(A) | 题干(B) | 选项1~5(C~G) | 答案(H)
+// 每行为一道题，H列 = [答案：xxx]
+// ============================================================
+async function parseExcel(file: File, isXls: boolean): Promise<ParsedDoc> {
+  const arrayBuffer = await file.arrayBuffer();
+  const wb = XLSX.read(arrayBuffer, { type: "array", cellStyles: true });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, { header: ["A", "B", "C", "D", "E", "F", "G", "H"], defval: "" });
+
+  // 找到第一个非空数据行作为标题行
+  let title = "IELTS Listening Test";
+  const questions: Question[] = [];
+  // 跳过标题行直到遇到题型列(A列非空)或有空白编号(B列含 __)
+  let started = false;
+  const blankRe = /(\d{1,2})\s*_{5,}/;
+
+  for (const row of rows) {
+    const typeA = (row.A || "").toString().trim();
+    const textB = (row.B || "").toString().trim();
+    const answerH = (row.H || "").toString().trim();
+
+    // 跳过完全空行和表头行
+    if (!typeA && !textB && !answerH) continue;
+    if (/^(题型|题目|选项|答案)$/.test(typeA) && !started) continue;
+    if (/^(选项|答案)$/.test(textB) && !started) continue;
+
+    // 取第一个有效行作为标题
+    if (!started && textB && textB.length > 5 && !blankRe.test(textB)) {
+      started = true;
+      if (!/填|选|选|Q|\d_/.test(textB) || textB.length < 30) {
+        title = textB;
+      }
+      continue;
+    }
+
+    // 题干行 = 包含空白编号
+    if (textB && blankRe.test(textB)) {
+      started = true;
+      const blankMatch = textB.match(blankRe);
+      if (!blankMatch) continue;
+      const qNum = parseInt(blankMatch[1]);
+
+      // 标准化空白
+      let cleanText = textB.replace(blankRe, "$1__________");
+      // 提取答案（H列可能为 "[答案：corner]" 或 "corner"）
+      let ans = answerH.replace(/^\[?\s*答\s*案\s*[：:]?\s*/, "").replace(/\]$/, "").trim();
+
+      // 判断题型
+      const qType = typeA.includes("选") ? "multiple-choice" as const : "fill-blank" as const;
+
+      questions.push({
+        id: `q-${qNum}`,
+        number: qNum,
+        part: Math.ceil(qNum / 10) || 1,
+        type: qType,
+        text: cleanText,
+        answer: ans ? cleanAnswer(ans) : "",
+      });
+    }
+  }
+
+  // 按编号去重+排序
+  const uniqueQs = Array.from(new Map(questions.map(q => [q.number, q])).values())
+    .sort((a, b) => a.number - b.number);
+
+  const sectionMap: Record<number, Question[]> = {};
+  uniqueQs.forEach(q => { (sectionMap[q.part] ||= []).push(q); });
+  const sections: ExamSection[] = Object.entries(sectionMap).map(([part, qs]) => ({
+    part: parseInt(part),
+    title: `Part ${parseInt(part)}`,
+    questions: qs,
+  }));
+
   return { title, sections };
 }
 
