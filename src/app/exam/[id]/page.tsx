@@ -542,6 +542,30 @@ export default function ExamPage() {
   const [activeTool, setActiveTool] = useState<ToolMode>("none");
   const [activeColor, setActiveColor] = useState("#fef08a");
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [imageScale, setImageScale] = useState(1); // 图片缩放比例 1-3
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0, scale: 1 });
+
+  // 🖱️ 图片拖拽拉伸监听
+  useEffect(() => {
+    if (!isDragging) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      // 水平或垂直拖动距离取较大值来计算缩放
+      const delta = Math.max(Math.abs(dx), Math.abs(dy));
+      const direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : -1) : (dy > 0 ? 1 : -1);
+      const newScale = dragStart.scale + direction * (delta / 200); // 拖动200px = 缩放1倍
+      setImageScale(Math.max(1, Math.min(3, newScale)));
+    };
+    const handleMouseUp = () => setIsDragging(false);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging, dragStart]);
 
   // 加载试卷
   useEffect(() => {
@@ -813,18 +837,57 @@ export default function ExamPage() {
                   {/* 🗺️ 地图左右分栏区域 */}
                   {mapGroup.length > 0 && (
                     <div className="flex gap-5 items-start bg-white border-2 border-emerald-100 rounded-2xl p-5 shadow-sm">
-                      {/* 左侧：地图大图 */}
-                      <div className="w-[55%] flex-shrink-0">
-                        <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-inner">
+                      {/* 左侧：地图大图（可拖拽拉伸） */}
+                      <div className="w-[55%] flex-shrink-0 select-none">
+                        <div
+                          className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-inner relative"
+                          style={{ minHeight: 200 }}
+                        >
                           <img
                             src={exam.imageUrl}
                             alt="地图 / 示意图"
-                            className="w-full max-h-[520px] object-contain"
-                            onClick={() => setLightboxOpen(true)}
-                            style={{ cursor: "zoom-in" }}
+                            className="w-full object-contain transition-transform duration-75"
+                            style={{
+                              transform: `scale(${imageScale})`,
+                              transformOrigin: "top left",
+                              cursor: isDragging ? "grabbing" : imageScale > 1 ? "grab" : "zoom-in",
+                              maxHeight: 520 * imageScale,
+                              userSelect: "none",
+                            }}
+                            onMouseDown={(e) => {
+                              // 左键拖拽拉伸
+                              if (e.button !== 0) return;
+                              e.preventDefault();
+                              setIsDragging(true);
+                              setDragStart({ x: e.clientX, y: e.clientY, scale: imageScale });
+                            }}
+                            onClick={() => {
+                              if (!isDragging) setLightboxOpen(true);
+                            }}
                           />
                         </div>
-                        <p className="text-xs text-slate-400 mt-2 text-center">点击图片可放大</p>
+                        {/* 缩放控制条 */}
+                        <div className="flex items-center justify-center gap-2 mt-2">
+                          <button
+                            onClick={() => setImageScale(s => Math.max(1, s - 0.25))}
+                            className="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-md transition-colors font-medium text-slate-600"
+                            title="缩小"
+                          >➖</button>
+                          <span className="text-xs text-slate-500 font-mono min-w-[4rem] text-center">
+                            {Math.round(imageScale * 100)}%
+                          </span>
+                          <button
+                            onClick={() => setImageScale(s => Math.min(3, s + 0.25))}
+                            className="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-md transition-colors font-medium text-slate-600"
+                            title="放大 / 拖拽图片也可拉伸"
+                          >➕</button>
+                          <button
+                            onClick={() => setImageScale(1)}
+                            className="px-2.5 py-1 text-xs bg-slate-100 hover:bg-slate-200 rounded-md transition-colors text-slate-400"
+                            title="重置大小"
+                          >↺</button>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1 text-center">拖拽拉伸 · 点击放大 · 最大300%</p>
                       </div>
 
                       {/* 右侧：题目列表 */}
