@@ -19,10 +19,13 @@ export interface ExamSection {
   questions: Question[];
 }
 
+export type IELTSModule = "listening" | "reading" | "writing" | "speaking";
+
 export interface Exam {
   id: string;
   title: string;
   description?: string;
+  module: IELTSModule; // 雅思模块
   audioUrl?: string;
   wordUrl?: string;
   duration?: number; // 分钟
