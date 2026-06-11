@@ -392,8 +392,8 @@ function ScoreCard({
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
-      <div className="max-w-xl w-full bg-white rounded-3xl shadow-xl p-8 md:p-10">
+    <div className="min-h-screen bg-slate-50 px-4 py-12">
+      <div className="max-w-5xl mx-auto w-full bg-white rounded-3xl shadow-xl p-8 md:p-10">
         {/* Band Score 大圆 */}
         <div className="text-center mb-8">
           <div className="relative inline-block">
@@ -892,7 +892,7 @@ export default function ExamPage() {
 
       {/* Part 翻页 */}
       <div className="bg-white border-t border-slate-200 px-6 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="flex items-center justify-between">
           <button
             onClick={() => setCurrentPart(p => Math.max(1, p - 1))}
             disabled={currentPart <= 1}
