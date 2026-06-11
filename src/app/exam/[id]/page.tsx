@@ -541,6 +541,7 @@ export default function ExamPage() {
   const [submitted, setSubmitted] = useState(false);
   const [activeTool, setActiveTool] = useState<ToolMode>("none");
   const [activeColor, setActiveColor] = useState("#fef08a");
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   // 加载试卷
   useEffect(() => {
@@ -705,7 +706,7 @@ export default function ExamPage() {
       </div>
 
       {/* 单列主体：每行一道题（题目+答题框同线）*/}
-      <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <div className="flex-1 w-full px-6 py-6">
         {/* Part 标题卡片 */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-4">
           <h2 className="text-xl font-bold text-slate-900">{currentSection?.title}</h2>
@@ -819,7 +820,7 @@ export default function ExamPage() {
                             src={exam.imageUrl}
                             alt="地图 / 示意图"
                             className="w-full max-h-[520px] object-contain"
-                            onClick={() => window.open(exam.imageUrl, "_blank")}
+                            onClick={() => setLightboxOpen(true)}
                             style={{ cursor: "zoom-in" }}
                           />
                         </div>
@@ -853,6 +854,29 @@ export default function ExamPage() {
                             </div>
                           );
                         })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 🖼️ Lightbox 图片放大弹窗 */}
+                  {lightboxOpen && exam.imageUrl && (
+                    <div
+                      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+                      onClick={() => setLightboxOpen(false)}
+                    >
+                      <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setLightboxOpen(false)}
+                          className="absolute -top-10 right-0 text-white/80 hover:text-white transition-colors text-sm flex items-center gap-1"
+                        >
+                          ✕ 关闭 (ESC)
+                        </button>
+                        <img
+                          src={exam.imageUrl}
+                          alt="地图 / 示意图（放大）"
+                          className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+                        />
+                        <p className="text-center text-white/50 text-xs mt-2">点击空白处关闭</p>
                       </div>
                     </div>
                   )}
