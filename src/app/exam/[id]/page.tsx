@@ -251,6 +251,27 @@ function QuestionRow({
   const isCorrect = submitted && answerValue.trim() !== "" && checkAnswer(answerValue, question.answer);
   const isAnswered = submitted && answerValue.trim() !== "";
 
+  // 将高亮/划线标注嵌入到原文 HTML 中（原地渲染，不在下方另起一行）
+  const renderAnnotatedText = () => {
+    let html = question.text;
+    // 按在原文中出现的位置倒序排列，避免替换后偏移量变化
+    const sortedAnn = [...qAnns.filter(a => a.type !== "note")].sort((a, b) => {
+      return html.indexOf(a.content) - html.indexOf(b.content);
+    });
+    // 从后往前替换，保证位置不偏移
+    for (let i = sortedAnn.length - 1; i >= 0; i--) {
+      const ann = sortedAnn[i];
+      const idx = html.indexOf(ann.content);
+      if (idx !== -1) {
+        const tag = ann.type === "highlight"
+          ? `<mark style="background-color:${ann.color};border-radius:2px;padding:0 2px;">${ann.content}</mark>`
+          : `<mark style="text-decoration:line-through;background:none;color:inherit;">${ann.content}</mark>`;
+        html = html.substring(0, idx) + tag + html.substring(idx + ann.content.length);
+      }
+    }
+    return html;
+  };
+
   return (
     <div className={clsx(
       "flex gap-4 items-start p-4 rounded-2xl border shadow-sm transition",
@@ -276,23 +297,8 @@ function QuestionRow({
             activeTool !== "none" && !submitted && "cursor-crosshair"
           )}
           onMouseUp={() => handleTextSelect()}
-        >
-          {question.text}
-        </p>
-
-        {/* 高亮/划线标注 */}
-        {qAnns.filter(a => a.type !== "note").map(ann => (
-          <mark
-            key={ann.id}
-            className={clsx(
-              ann.type === "highlight" ? "rounded px-0.5" : "line-through",
-              "bg-opacity-50 mt-1 inline-block"
-            )}
-            style={{ backgroundColor: ann.color }}
-          >
-            {ann.content}
-          </mark>
-        ))}
+          dangerouslySetInnerHTML={{ __html: renderAnnotatedText() }}
+        />
 
         {/* 笔记气泡 */}
         {qAnns.filter(a => a.type === "note").map(ann => (
