@@ -75,7 +75,7 @@ export default function AdminPage() {
           .from("exam-materials")
           .upload(audioPath, audioFile);
         if (audioErr) {
-          console.warn("音频上传失败（可能未创建 Storage bucket）：", audioErr.message);
+          throw new Error(`音频上传失败：${audioErr.message}。请在 Supabase 控制台确认 Storage bucket "exam-materials" 已创建且权限正确。`);
         } else {
           const { data } = supabase.storage.from("exam-materials").getPublicUrl(audioPath);
           audioUrl = data.publicUrl;
