@@ -149,17 +149,24 @@ export default function AdminPage() {
         }),
       }));
 
+      const insertData: Record<string, unknown> = {
+        title: title.trim() || "IELTS Listening Test",
+        description: description.trim(),
+        audio_url: audioUrl,
+        sections: finalSections,
+        is_published: true,
+        duration: 30,
+      };
+      // 如果 module 列存在则传入（兼容旧 schema）
+      try {
+        (insertData as Record<string, unknown>).module = selectedModule;
+      } catch {
+        // module 列不存在时忽略
+      }
+
       const { data, error: dbErr } = await supabase
         .from("exams")
-        .insert({
-          title: title.trim() || "IELTS Listening Test",
-          description: description.trim(),
-          module: selectedModule,
-          audio_url: audioUrl,
-          sections: finalSections,
-          is_published: true,
-          duration: 30,
-        })
+        .insert(insertData)
         .select("id")
         .single();
 
