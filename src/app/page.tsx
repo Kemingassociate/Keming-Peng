@@ -95,11 +95,11 @@ export default function HomePage() {
             在线模考 · 四大模块 · 雅思官方评分标准
           </div>
           <h1 className="text-3xl md:text-4xl font-black mb-4 leading-tight">
-            雅思全模块在线模考平台
+            雅思分手大师
           </h1>
           <p className="text-blue-100 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-            听力、阅读、写作、口语 — 四大模块全覆盖<br />
-            上传文档即可出题，完成后立即显示 Band Score
+            广东外语外贸大学国际学院<br />
+            雅思，拜拜了您内
           </p>
         </div>
       </section>
