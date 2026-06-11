@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  /* IELTS 品牌配色 */
+  --color-primary: #1e40af;       /* 深蓝主色 */
+  --color-primary-light: #3b82f6;
+  --color-accent: #ea580c;        /* 橙红强调 */
+  --color-accent-light: #f97316;
+  --color-surface: #f8fafc;       /* 浅灰底 */
+  --color-border: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+
+  /* 语义色 */
+  --color-success: #16a34a;
+  --color-error: #dc2626;
+  --color-warning: #d97706;
+
+  /* 字体 */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #f1f5f9;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 高亮颜色 */
+.hl-yellow { background-color: #fef08a; }
+.hl-orange { background-color: #fed7aa; }
+.hl-green { background-color: #bbf7d0; }
+.hl-blue { background-color: #bfdbfe; }
+.hl-pink { background-color: #fbcfe8; }
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* 选中文字 */
+::selection { background: #bfdbfe; color: #1e40af; }
+
+/* 输入框 focus */
+input:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 1px;
+}
