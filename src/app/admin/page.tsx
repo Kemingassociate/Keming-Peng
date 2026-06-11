@@ -25,6 +25,10 @@ export default function AdminPage() {
   // Word 文件预览用的本地 URL
   const [wordPreviewUrl, setWordPreviewUrl] = useState<string | null>(null);
 
+  // 编辑后的题目（key = "part-number"，如 "1-11"）
+  type EditedQ = { text: string; answer: string };
+  const [editedQuestions, setEditedQuestions] = useState<Record<string, EditedQ>>({});
+
   // 处理 Word 上传并解析
   const handleWordFile = useCallback(async (file: File) => {
     setError("");
@@ -37,6 +41,7 @@ export default function AdminPage() {
       } else {
         setParsed(result);
         setTitle(result.title);
+        setEditedQuestions({});  // 每次重新解析清空编辑状态
         setStep("preview");
       }
     } catch (err) {
@@ -53,7 +58,7 @@ export default function AdminPage() {
     setAudioFile(file);
   }, []);
 
-  // 上传到 Supabase 并保存
+  // 上传到 Supabase 并保存（使用编辑后的题目）
   const handleSave = async () => {
     if (!parsed) return;
     setUploading(true);
@@ -61,7 +66,6 @@ export default function AdminPage() {
 
     try {
       let audioUrl = "";
-      let wordUrl = wordPreviewUrl || "";
 
       // 上传音频到 Supabase Storage
       if (audioFile) {
@@ -78,6 +82,20 @@ export default function AdminPage() {
         }
       }
 
+      // 应用用户编辑后的题目文本和答案
+      const finalSections = parsed.sections.map(section => ({
+        ...section,
+        questions: section.questions.map(q => {
+          const key = `${section.part}-${q.number}`;
+          const edited = editedQuestions[key];
+          return {
+            ...q,
+            text: edited?.text ?? q.text,
+            answer: edited?.answer ?? q.answer,
+          };
+        }),
+      }));
+
       // 保存试卷到数据库
       const { data, error: dbErr } = await supabase
         .from("exams")
@@ -85,7 +103,7 @@ export default function AdminPage() {
           title: title.trim() || "IELTS Listening Test",
           description: description.trim(),
           audio_url: audioUrl,
-          sections: parsed.sections,
+          sections: finalSections,
           is_published: true,
           duration: 30,
         })
@@ -103,8 +121,7 @@ export default function AdminPage() {
     }
   };
 
-  // 预览某道题
-  const [previewQ, setPreviewQ] = useState<number | null>(null);
+  // 预览某道题（已移除，改用行内编辑）
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -274,47 +291,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── 步骤 2：预览 ── */}
+        {/* ── 步骤 2：预览（Excel 模板样式）── */}
         {step === "preview" && parsed && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="font-bold text-slate-900 text-lg">题目预览</h2>
-                <div className="text-sm text-slate-400">
-                  共 {parsed.sections.reduce((s, sec) => s + sec.questions.length, 0)} 道题
-                </div>
-              </div>
-
-              {parsed.sections.map(section => (
-                <div key={section.part} className="mb-6 last:mb-0">
-                  <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                    <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                      {section.title}
-                    </span>
-                    <span className="text-slate-400 text-xs">{section.questions.length} 题</span>
-                  </h3>
-                  <div className="space-y-2">
-                    {section.questions.map(q => (
-                      <div
-                        key={q.id}
-                        className="bg-slate-50 rounded-xl p-3 flex items-start gap-3"
-                      >
-                        <span className="text-xs font-bold text-slate-400 w-8 flex-shrink-0 pt-0.5">
-                          Q{q.number}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-slate-700 line-clamp-2">{q.text}</p>
-                          <p className="text-xs text-green-700 mt-1 font-medium">
-                            答案：{q.answer || <span className="text-amber-500">（未识别）</span>}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
+          <div className="space-y-5">
             {/* 音频状态提示 */}
             {!audioFile && (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
@@ -346,6 +325,95 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {/* 表格预览 */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              {/* 表头 */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+                <h2 className="font-bold text-slate-900 text-base">题目预览</h2>
+                <div className="text-sm text-slate-400">
+                  共 {parsed.sections.reduce((s, sec) => s + sec.questions.length, 0)} 道题
+                </div>
+              </div>
+
+              {/* 固定表头行 */}
+              <div className="flex border-b border-slate-200 bg-slate-100">
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 w-16 flex-shrink-0 text-center border-r border-slate-200">题型</div>
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 flex-1 border-r border-slate-200">题目（题干，含空白编号）</div>
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 w-16 flex-shrink-0 text-center border-r border-slate-200">选项1</div>
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 w-16 flex-shrink-0 text-center border-r border-slate-200">选项2</div>
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 w-16 flex-shrink-0 text-center border-r border-slate-200">选项3</div>
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 w-16 flex-shrink-0 text-center border-r border-slate-200">选项4</div>
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 w-16 flex-shrink-0 text-center border-r border-slate-200">选项5</div>
+                <div className="px-3 py-2 text-xs font-bold text-slate-500 w-36 flex-shrink-0 text-center">答案</div>
+              </div>
+
+              {/* 题目行 */}
+              {parsed.sections.map(section => (
+                <div key={section.part}>
+                  {/* Part 分隔行 */}
+                  <div className="px-4 py-2 bg-blue-50 border-y border-blue-200 flex items-center gap-2">
+                    <span className="text-xs font-bold text-blue-700">{section.title}</span>
+                    <span className="text-xs text-blue-400">{section.questions.length} 题</span>
+                  </div>
+
+                  {section.questions.map((q, qIdx) => {
+                    const rowKey = `${section.part}-${q.number}`;
+                    return (
+                      <div
+                        key={q.id}
+                        className={clsx(
+                          "flex items-start border-b border-slate-100 hover:bg-blue-50/30 transition",
+                          qIdx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                        )}
+                      >
+                        {/* A列：题型 */}
+                        <div className="px-3 py-3 w-16 flex-shrink-0 text-center border-r border-slate-200 flex items-center justify-center">
+                          <span className="text-xs font-medium text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">填空题</span>
+                        </div>
+                        {/* B列：题干（可编辑）*/}
+                        <div className="px-3 py-2 flex-1 min-w-0 border-r border-slate-200">
+                          <input
+                            type="text"
+                            value={editedQuestions[rowKey]?.text ?? q.text}
+                            onChange={e => setEditedQuestions(prev => ({
+                              ...prev,
+                              [rowKey]: { ...prev[rowKey], text: e.target.value, answer: prev[rowKey]?.answer ?? q.answer }
+                            }))}
+                            className="w-full text-sm text-slate-700 leading-relaxed bg-transparent border border-transparent hover:border-blue-300 focus:border-blue-500 focus:bg-white focus:rounded-lg px-2 py-1 transition outline-none"
+                          />
+                        </div>
+                        {/* C-G列：选项（填空题留空）*/}
+                        {[0, 1, 2, 3, 4].map(optIdx => (
+                          <div
+                            key={optIdx}
+                            className="px-2 py-2 w-16 flex-shrink-0 text-center border-r border-slate-200"
+                          />
+                        ))}
+                        {/* H列：答案（可编辑）*/}
+                        <div className="px-3 py-2 w-36 flex-shrink-0 flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={editedQuestions[rowKey]?.answer ?? q.answer}
+                            onChange={e => setEditedQuestions(prev => ({
+                              ...prev,
+                              [rowKey]: { ...prev[rowKey], answer: e.target.value, text: prev[rowKey]?.text ?? q.text }
+                            }))}
+                            placeholder="未识别"
+                            className={clsx(
+                              "w-full text-sm px-2 py-1 rounded-lg border transition outline-none focus:bg-white",
+                              editedQuestions[rowKey]?.answer ?? q.answer
+                                ? "border-green-300 bg-green-50 text-green-800 focus:border-green-500"
+                                : "border-amber-300 bg-amber-50 text-amber-700 focus:border-amber-500"
+                            )}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
 
             {/* 编辑标题 */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">

@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import type { ParsedDoc, Question } from "@/types";
+import type { ParsedDoc, Question, ExamSection } from "@/types";
 
 export async function parseDocx(file: File): Promise<ParsedDoc> {
   const arrayBuffer = await file.arrayBuffer();
@@ -21,7 +21,7 @@ export async function parseDocx(file: File): Promise<ParsedDoc> {
   if (resultC.sections.length > 0 && resultC.sections[0].questions.length > 0) return resultC;
 
   // 格式 A（末尾答案区）
-  const resultA = tryParseFormatA(rawText);
+  const resultA = tryParseFormatFormatA(rawText);
   if (resultA.sections.length > 0 && resultA.sections[0].questions.length > 0) return resultA;
 
   // 回退格式 B
@@ -30,55 +30,95 @@ export async function parseDocx(file: File): Promise<ParsedDoc> {
 
 // ============================================================
 // 格式 C：内嵌答案（[答案：xxx] 或 答案：xxx）
+// 每道题一行，B=题干（含编号空白），H=[答案：xxx]
 // ============================================================
 function tryParseFormatC(rawText: string): ParsedDoc {
   const title = extractTitle(rawText);
+
+  // 找出所有带编号的空白占位
   const blankRe = /(\d{1,2})\s*_{5,}/g;
   const blanks: { num: number; index: number }[] = [];
   let m: RegExpExecArray | null;
-  while ((m = blankRe.exec(rawText)) !== null) blanks.push({ num: parseInt(m[1]), index: m.index });
+  while ((m = blankRe.exec(rawText)) !== null) {
+    blanks.push({ num: parseInt(m[1]), index: m.index });
+  }
   if (blanks.length === 0) return { title, sections: [] };
 
-  // 先构建答案映射（用于从 segment 中剔除答案文本）
-  const answerMap = buildAnswerMapFormatC(rawText, blanks);
+  // 构建每道题的答案映射（格式C在题目行下方直接给出答案）
+  const answerMap: Record<number, string> = buildAnswerMapFormatC(rawText, blanks);
 
-  // 再构建题目文本（清除答案标记）
-  const questions: { number: number; text: string }[] = [];
-  for (let i = 0; i < blanks.length; i++) {
-    const cur = blanks[i];
+  // 构建每道题的题干文本（仅截取围绕本题的内容，剔除答案标记）
+  const questions: Question[] = blanks.map((cur, i) => {
+    // 左边界：上一个答案标记结束处，最多回退 150 字符
+    const prevAnsEnd = i > 0 ? rawText.indexOf("]", blanks[i - 1].index) : -1;
+    const leftBoundary = prevAnsEnd > 0 ? Math.min(prevAnsEnd + 3, cur.index) : Math.max(0, cur.index - 150);
 
-    // 智能左边界：上一个题目的答案标记末尾，或最多 120 个字符前
-    const prevAnswerEnd = i > 0 ? rawText.indexOf("]", blanks[i - 1].index) : -1;
-    const leftBoundary = prevAnswerEnd > 0 ? Math.min(prevAnswerEnd + 3, cur.index) : Math.max(0, cur.index - 120);
-    const segStart = Math.max(leftBoundary, cur.index - 120);
+    // 右边界：下一个空白位置之前（不跨越）
+    const rightBoundary = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
 
-    // 智能右边界：下一个题目的空白位置，不要跨越
-    const nextBoundary = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
-    const segEnd = Math.min(nextBoundary, cur.index + 120);
-
-    // 提取原始文本片段
-    let segment = rawText.substring(segStart, segEnd)
+    // 提取片段
+    let seg = rawText.substring(leftBoundary, rightBoundary)
       .replace(/\r?\n/g, " ")
       .replace(/\s{2,}/g, " ")
       .trim();
 
-    // 标准化空白占位符：统一为 __________
-    segment = segment.replace(/^\d+\s*_+\s*/, "__________ ");
-    segment = segment.replace(/\d+\s*_+/g, "__________");
+    // 标准化空白占位符为 "N__________"
+    seg = seg.replace(/(\d+)\s*_{5,}/g, "$1__________");
 
-    // ⬇️ 核心修复：剔除一切 [答案：xxx] / 答案：xxx 标记
-    segment = segment.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]+\]?/g, "").trim();
-    segment = segment.replace(/\s{2,}/g, " ").trim();
+    // 剔除答案标记（格式C、H列答案、[答案：xxx] 等全部清除）
+    seg = seg.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]*\]?/gi, "").trim();
+    seg = seg.replace(/\s{2,}/g, " ").trim();
 
-    questions.push({ number: cur.num, text: segment });
+    return {
+      id: `q-${cur.num}`,
+      number: cur.num,
+      part: Math.ceil(cur.num / 10) || 1,
+      type: "fill-blank" as const,
+      text: seg,
+      answer: answerMap[cur.num] || "",
+    };
+  });
+
+  // 按 part 分组
+  const sectionMap: Record<number, Question[]> = {};
+  questions.forEach(q => { (sectionMap[q.part] ||= []).push(q); });
+  const sections: ExamSection[] = Object.entries(sectionMap).map(([part, qs]) => ({
+    part: parseInt(part),
+    title: `Part ${parseInt(part)}`,
+    questions: qs,
+  }));
+
+  return { title, sections };
+}
+
+// ============================================================
+// 格式 C 答案映射构建
+// ============================================================
+function buildAnswerMapFormatC(rawText: string, blanks: { num: number; index: number }[]): Record<number, string> {
+  const answerMap: Record<number, string> = {};
+
+  for (let i = 0; i < blanks.length; i++) {
+    const cur = blanks[i];
+    const searchStart = cur.index;
+    const searchEnd = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
+    const zone = rawText.substring(searchStart, searchEnd);
+
+    // 匹配 [答案：xxx] 或 答案：xxx（支持有无方括号）
+    const ansMatch = zone.match(/\[?\s*答\s*案\s*[：:]?\s*([^\]\n]+?)\s*\]?$/i);
+    if (ansMatch) {
+      const raw = ansMatch[1].trim();
+      if (raw) answerMap[cur.num] = cleanAnswer(raw);
+    }
   }
 
-  // 兜底：末尾答案区
+  // 兜底：如果格式C答案识别率低于50%，尝试末尾答案区
   if (Object.keys(answerMap).length < blanks.length * 0.5) {
     const answerIdx = rawText.lastIndexOf("答案");
     if (answerIdx > 0) {
       const tail = rawText.substring(answerIdx);
-      const answerLines = tail.split(/[\n\r]+/).map(l => l.replace(/^答案\s*[：:]?\s*/, "").trim()).filter(l => l.length > 0 && l.length < 100);
+      const answerLines = tail.split(/[\n\r]+/)
+        .map(l => l.replace(/^答案\s*[：:]?\s*/, "").trim())
+        .filter(l => l.length > 0 && l.length < 100);
       const numLine = answerLines.find(l => /^\d+[\.:]/.test(l));
       if (numLine) {
         answerLines.forEach(line => {
@@ -86,73 +126,63 @@ function tryParseFormatC(rawText: string): ParsedDoc {
           if (nm) answerMap[parseInt(nm[1])] = cleanAnswer(nm[2].trim());
         });
       } else {
-        const sorted = [...questions].sort((a, b) => a.number - b.number);
-        answerLines.forEach((ans, idx) => { if (idx < sorted.length) answerMap[sorted[idx].number] = cleanAnswer(ans); });
+        // 无编号行：按题目顺序对应
+        const sorted = [...blanks].sort((a, b) => a.num - b.num);
+        answerLines.forEach((ans, idx) => {
+          if (idx < sorted.length) answerMap[sorted[idx].num] = cleanAnswer(ans);
+        });
       }
     }
   }
 
-  return buildResult(title, questions, answerMap);
-}
-
-/**
- * 格式 C 的答案映射构建：
- * 在每个空白位置之后查找 [答案：xxx] 或 答案：xxx 标记
- */
-function buildAnswerMapFormatC(rawText: string, blanks: { num: number; index: number }[]): Record<number, string> {
-  const answerMap: Record<number, string> = {};
-  for (let i = 0; i < blanks.length; i++) {
-    const cur = blanks[i];
-    const searchStart = cur.index;
-    const searchEnd = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
-    const answerZone = rawText.substring(searchStart, searchEnd);
-    // 匹配 [答案：xxx]、[答案:xxx]、答案：xxx 等格式
-    const ansMatch = answerZone.match(/\[?\s*答\s*案\s*[：:]?\s*([^\]\n]+?)\s*\]?/i);
-    if (ansMatch) {
-      const raw = ansMatch[1].trim();
-      if (raw) answerMap[cur.num] = cleanAnswer(raw);
-    }
-  }
   return answerMap;
 }
 
 // ============================================================
 // 格式 A：题目混排 + 末尾「答案：」区
 // ============================================================
-function tryParseFormatA(rawText: string): ParsedDoc {
+function tryParseFormatFormatA(rawText: string): ParsedDoc {
   const title = extractTitle(rawText);
+
   const blankRe = /(\d{1,2})\s*_{5,}/g;
   const blanks: { num: number; index: number }[] = [];
   let m: RegExpExecArray | null;
-  while ((m = blankRe.exec(rawText)) !== null) blanks.push({ num: parseInt(m[1]), index: m.index });
+  while ((m = blankRe.exec(rawText)) !== null) {
+    blanks.push({ num: parseInt(m[1]), index: m.index });
+  }
   if (blanks.length === 0) return { title, sections: [] };
 
-  const questions: { number: number; text: string }[] = [];
-  for (let i = 0; i < blanks.length; i++) {
-    const cur = blanks[i];
-    // 缩小窗口 + 剔除答案标记
-    const prevAnswerEnd = i > 0 ? rawText.indexOf("]", blanks[i - 1].index) : -1;
-    const leftBoundary = prevAnswerEnd > 0 ? Math.min(prevAnswerEnd + 3, cur.index) : Math.max(0, cur.index - 120);
-    const segStart = Math.max(leftBoundary, cur.index - 120);
-    const nextBoundary = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
-    const segEnd = Math.min(nextBoundary, cur.index + 120);
-    let segment = rawText.substring(segStart, segEnd)
+  const questions: Question[] = blanks.map((cur, i) => {
+    const prevAnsEnd = i > 0 ? rawText.indexOf("]", blanks[i - 1].index) : -1;
+    const leftBoundary = prevAnsEnd > 0 ? Math.min(prevAnsEnd + 3, cur.index) : Math.max(0, cur.index - 150);
+    const rightBoundary = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
+
+    let seg = rawText.substring(leftBoundary, rightBoundary)
       .replace(/\r?\n/g, " ")
       .replace(/\s{2,}/g, " ")
       .trim();
-    segment = segment.replace(/^\d+\s*_+\s*/, "__________ ");
-    segment = segment.replace(/\d+\s*_+/g, "__________");
-    // 剔除可能混入的答案标记
-    segment = segment.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]+\]?/g, "").trim();
-    segment = segment.replace(/\s{2,}/g, " ").trim();
-    questions.push({ number: cur.num, text: segment });
-  }
+    seg = seg.replace(/(\d+)\s*_{5,}/g, "$1__________");
+    seg = seg.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]*\]?/gi, "").trim();
+    seg = seg.replace(/\s{2,}/g, " ").trim();
 
+    return {
+      id: `q-${cur.num}`,
+      number: cur.num,
+      part: Math.ceil(cur.num / 10) || 1,
+      type: "fill-blank" as const,
+      text: seg,
+      answer: "",
+    };
+  });
+
+  // 从末尾答案区读取答案
   const answerMap: Record<number, string> = {};
   const answerIdx = rawText.lastIndexOf("答案");
   if (answerIdx > 0) {
     const tail = rawText.substring(answerIdx);
-    const answerLines = tail.split(/[\n\r]+/).map(l => l.replace(/^答案\s*[：:]?\s*/, "").trim()).filter(l => l.length > 0 && l.length < 100);
+    const answerLines = tail.split(/[\n\r]+/)
+      .map(l => l.replace(/^答案\s*[：:]?\s*/, "").trim())
+      .filter(l => l.length > 0 && l.length < 100);
     const numLine = answerLines.find(l => /^\d+[\.:]/.test(l));
     if (numLine) {
       answerLines.forEach(line => {
@@ -160,17 +190,32 @@ function tryParseFormatA(rawText: string): ParsedDoc {
         if (nm) answerMap[parseInt(nm[1])] = cleanAnswer(nm[2].trim());
       });
     } else {
-      const sorted = [...questions].sort((a, b) => a.number - b.number);
-      answerLines.forEach((ans, i) => { if (i < sorted.length) answerMap[sorted[i].number] = cleanAnswer(ans); });
+      const sorted = [...blanks].sort((a, b) => a.num - b.num);
+      answerLines.forEach((ans, i) => {
+        if (i < sorted.length) answerMap[sorted[i].num] = cleanAnswer(ans);
+      });
     }
   } else {
     const allLines = rawText.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
     const tailLines = allLines.slice(-blanks.length);
-    const sorted = [...questions].sort((a, b) => a.number - b.number);
-    tailLines.forEach((ans, i) => { if (i < sorted.length) answerMap[sorted[i].number] = cleanAnswer(ans); });
+    const sorted = [...blanks].sort((a, b) => a.num - b.num);
+    tailLines.forEach((ans, i) => {
+      if (i < sorted.length) answerMap[sorted[i].num] = cleanAnswer(ans);
+    });
   }
 
-  return buildResult(title, questions, answerMap);
+  // 注入答案
+  questions.forEach(q => { q.answer = answerMap[q.number] || ""; });
+
+  const sectionMap: Record<number, Question[]> = {};
+  questions.forEach(q => { (sectionMap[q.part] ||= []).push(q); });
+  const sections: ExamSection[] = Object.entries(sectionMap).map(([part, qs]) => ({
+    part: parseInt(part),
+    title: `Part ${parseInt(part)}`,
+    questions: qs,
+  }));
+
+  return { title, sections };
 }
 
 // ============================================================
@@ -191,18 +236,34 @@ function tryParseFormatB(rawText: string): ParsedDoc {
     if (partMatch) {
       if (pendingQ) { currentSection.questions.push(pendingQ); pendingQ = null; }
       if (currentSection.questions.length > 0) sections.push(currentSection);
-      currentSection = { part: parseInt(partMatch[1]) || sections.length + 1, title: `Part ${parseInt(partMatch[1]) || sections.length + 1}`, questions: [] };
+      currentSection = {
+        part: parseInt(partMatch[1]) || sections.length + 1,
+        title: `Part ${parseInt(partMatch[1]) || sections.length + 1}`,
+        questions: [],
+      };
       continue;
     }
     const qMatch = line.match(qRe);
     if (qMatch) {
       if (pendingQ) currentSection.questions.push(pendingQ);
-      pendingQ = { id: `q-${qMatch[1]}`, number: parseInt(qMatch[1]), part: currentSection.part, text: qMatch[2].trim(), type: "fill-blank", answer: "" };
+      pendingQ = {
+        id: `q-${qMatch[1]}`,
+        number: parseInt(qMatch[1]),
+        part: currentSection.part,
+        text: qMatch[2].trim(),
+        type: "fill-blank",
+        answer: "",
+      };
       continue;
     }
     const ansMatch = line.match(ansRe);
-    if (ansMatch && pendingQ) { pendingQ.answer = cleanAnswer(ansMatch[1].trim()); continue; }
-    if (pendingQ && line.length > 2 && !partRe.test(line)) pendingQ.text += " " + line;
+    if (ansMatch && pendingQ) {
+      pendingQ.answer = cleanAnswer(ansMatch[1].trim());
+      continue;
+    }
+    if (pendingQ && line.length > 2 && !partRe.test(line)) {
+      pendingQ.text += " " + line;
+    }
   }
   if (pendingQ) currentSection.questions.push(pendingQ);
   return { title, sections };
@@ -218,16 +279,8 @@ function cleanAnswer(raw: string): string {
     .replace(/,\s*,/g, ",")
     .replace(/,\s*$/, "")
     .replace(/^[\s,]+|[\s,]+$/g, "")
+    .replace(/\xa0/g, " ")
     .trim();
-}
-
-function buildResult(title: string, questions: { number: number; text: string }[], answerMap: Record<number, string>): ParsedDoc {
-  const uniqueQs = Array.from(new Map(questions.map(q => [q.number, q])).values()).sort((a, b) => a.number - b.number);
-  const finalQs: Question[] = uniqueQs.map(q => ({ id: `q-${q.number}`, number: q.number, part: Math.ceil(q.number / 10) || 1, text: q.text, type: "fill-blank", answer: answerMap[q.number] || "" }));
-  const sectionMap: Record<number, Question[]> = {};
-  finalQs.forEach(q => { (sectionMap[q.part] ||= []).push(q); });
-  const sections = Object.entries(sectionMap).map(([part, qs]) => ({ part: parseInt(part), title: `Part ${part}`, questions: qs }));
-  return { title, sections };
 }
 
 function extractTitle(rawText: string): string {
@@ -250,12 +303,25 @@ export function checkAnswer(userAnswer: string, correctAnswer: string): boolean 
 export function calcBandScore(correct: number, total: number): number {
   if (total === 0) return 0;
   const pct = (correct / total) * 100;
-  const table: [number, number][] = [[98, 9], [94, 8.5], [89, 8], [84, 7.5], [76, 7], [70, 6.5], [62, 6], [55, 5.5], [46, 5], [38, 4.5], [30, 4], [23, 3.5], [16, 3], [10, 2.5], [5, 2], [2, 1.5], [0, 1]];
-  for (const [threshold, band] of table) { if (pct >= threshold) return band; }
+  const table: [number, number][] = [
+    [98, 9], [94, 8.5], [89, 8], [84, 7.5], [76, 7], [70, 6.5],
+    [62, 6], [55, 5.5], [46, 5], [38, 4.5], [30, 4], [23, 3.5],
+    [16, 3], [10, 2.5], [5, 2], [2, 1.5], [0, 1],
+  ];
+  for (const [threshold, band] of table) {
+    if (pct >= threshold) return band;
+  }
   return 1;
 }
 
 export function getBandLabel(band: number): string {
-  const labels: Record<number, string> = { 9: "Expert User", 8.5: "Very Good User", 8: "Very Good User", 7.5: "Good User", 7: "Good User", 6.5: "Competent User", 6: "Competent User", 5.5: "Modest User", 5: "Modest User", 4.5: "Limited User", 4: "Limited User", 3.5: "Extremely Limited", 3: "Extremely Limited", 2.5: "Intermittent", 2: "Intermittent", 1.5: "Non User", 1: "Non User" };
+  const labels: Record<number, string> = {
+    9: "Expert User", 8.5: "Very Good User", 8: "Very Good User",
+    7.5: "Good User", 7: "Good User", 6.5: "Competent User",
+    6: "Competent User", 5.5: "Modest User", 5: "Modest User",
+    4.5: "Limited User", 4: "Limited User", 3.5: "Extremely Limited",
+    3: "Extremely Limited", 2.5: "Intermittent", 2: "Intermittent",
+    1.5: "Non User", 1: "Non User",
+  };
   return labels[band] || "Non User";
 }
