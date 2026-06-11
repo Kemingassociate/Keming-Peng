@@ -315,6 +315,38 @@ export default function AdminPage() {
               ))}
             </div>
 
+            {/* 音频状态提示 */}
+            {!audioFile && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <Music className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-800">未上传音频文件</p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      考生在答题时将看不到播放器。如需添加，请返回上一步上传音频。
+                    </p>
+                    <button
+                      onClick={() => setStep("upload")}
+                      className="mt-2 text-xs text-amber-700 underline hover:text-amber-900 transition"
+                    >
+                      返回上传音频 →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {audioFile && (
+              <div className="bg-green-50 border border-green-200 rounded-2xl p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-green-800">音频文件已就绪</p>
+                    <p className="text-xs text-green-600 mt-1">{audioFile.name}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 编辑标题 */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
               <h3 className="font-semibold text-slate-800 mb-4">试卷信息</h3>

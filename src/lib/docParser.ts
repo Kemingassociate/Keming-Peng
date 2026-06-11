@@ -39,27 +39,38 @@ function tryParseFormatC(rawText: string): ParsedDoc {
   while ((m = blankRe.exec(rawText)) !== null) blanks.push({ num: parseInt(m[1]), index: m.index });
   if (blanks.length === 0) return { title, sections: [] };
 
+  // 先构建答案映射（用于从 segment 中剔除答案文本）
+  const answerMap = buildAnswerMapFormatC(rawText, blanks);
+
+  // 再构建题目文本（清除答案标记）
   const questions: { number: number; text: string }[] = [];
   for (let i = 0; i < blanks.length; i++) {
     const cur = blanks[i];
-    const segStart = Math.max(0, cur.index - 280);
-    const segEnd = i + 1 < blanks.length ? Math.min(blanks[i + 1].index, cur.index + 220) : rawText.length;
-    let segment = rawText.substring(segStart, segEnd).replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ").trim();
-    segment = segment.replace(/^\d+\s*_+\s*/, "__________ ");
-    questions.push({ number: cur.num, text: segment });
-  }
 
-  const answerMap: Record<number, string> = {};
-  for (let i = 0; i < blanks.length; i++) {
-    const cur = blanks[i];
-    const answerStart = rawText.indexOf(cur.num + "__________", cur.index) + (cur.num + "__________").length;
-    const answerEnd = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
-    const answerZone = rawText.substring(answerStart, answerEnd);
-    const ansMatch = answerZone.match(/\[?\s*答\s*案\s*[：:]?\s*([^\]\n]+)/);
-    if (ansMatch) {
-      const raw = ansMatch[1].replace(/^\s*[：:]\s*/, "").replace(/\s+$/, "").trim();
-      if (raw) answerMap[cur.num] = cleanAnswer(raw);
-    }
+    // 智能左边界：上一个题目的答案标记末尾，或最多 120 个字符前
+    const prevAnswerEnd = i > 0 ? rawText.indexOf("]", blanks[i - 1].index) : -1;
+    const leftBoundary = prevAnswerEnd > 0 ? Math.min(prevAnswerEnd + 3, cur.index) : Math.max(0, cur.index - 120);
+    const segStart = Math.max(leftBoundary, cur.index - 120);
+
+    // 智能右边界：下一个题目的空白位置，不要跨越
+    const nextBoundary = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
+    const segEnd = Math.min(nextBoundary, cur.index + 120);
+
+    // 提取原始文本片段
+    let segment = rawText.substring(segStart, segEnd)
+      .replace(/\r?\n/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    // 标准化空白占位符：统一为 __________
+    segment = segment.replace(/^\d+\s*_+\s*/, "__________ ");
+    segment = segment.replace(/\d+\s*_+/g, "__________");
+
+    // ⬇️ 核心修复：剔除一切 [答案：xxx] / 答案：xxx 标记
+    segment = segment.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]+\]?/g, "").trim();
+    segment = segment.replace(/\s{2,}/g, " ").trim();
+
+    questions.push({ number: cur.num, text: segment });
   }
 
   // 兜底：末尾答案区
@@ -84,6 +95,27 @@ function tryParseFormatC(rawText: string): ParsedDoc {
   return buildResult(title, questions, answerMap);
 }
 
+/**
+ * 格式 C 的答案映射构建：
+ * 在每个空白位置之后查找 [答案：xxx] 或 答案：xxx 标记
+ */
+function buildAnswerMapFormatC(rawText: string, blanks: { num: number; index: number }[]): Record<number, string> {
+  const answerMap: Record<number, string> = {};
+  for (let i = 0; i < blanks.length; i++) {
+    const cur = blanks[i];
+    const searchStart = cur.index;
+    const searchEnd = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
+    const answerZone = rawText.substring(searchStart, searchEnd);
+    // 匹配 [答案：xxx]、[答案:xxx]、答案：xxx 等格式
+    const ansMatch = answerZone.match(/\[?\s*答\s*案\s*[：:]?\s*([^\]\n]+?)\s*\]?/i);
+    if (ansMatch) {
+      const raw = ansMatch[1].trim();
+      if (raw) answerMap[cur.num] = cleanAnswer(raw);
+    }
+  }
+  return answerMap;
+}
+
 // ============================================================
 // 格式 A：题目混排 + 末尾「答案：」区
 // ============================================================
@@ -98,10 +130,21 @@ function tryParseFormatA(rawText: string): ParsedDoc {
   const questions: { number: number; text: string }[] = [];
   for (let i = 0; i < blanks.length; i++) {
     const cur = blanks[i];
-    const segStart = Math.max(0, cur.index - 200);
-    const segEnd = i + 1 < blanks.length ? Math.min(blanks[i + 1].index, cur.index + 150) : Math.min(cur.index + 150, rawText.length);
-    let segment = rawText.substring(segStart, segEnd).replace(/\r?\n/g, " ").replace(/\s{2,}/g, " ").trim();
+    // 缩小窗口 + 剔除答案标记
+    const prevAnswerEnd = i > 0 ? rawText.indexOf("]", blanks[i - 1].index) : -1;
+    const leftBoundary = prevAnswerEnd > 0 ? Math.min(prevAnswerEnd + 3, cur.index) : Math.max(0, cur.index - 120);
+    const segStart = Math.max(leftBoundary, cur.index - 120);
+    const nextBoundary = i + 1 < blanks.length ? blanks[i + 1].index : rawText.length;
+    const segEnd = Math.min(nextBoundary, cur.index + 120);
+    let segment = rawText.substring(segStart, segEnd)
+      .replace(/\r?\n/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
     segment = segment.replace(/^\d+\s*_+\s*/, "__________ ");
+    segment = segment.replace(/\d+\s*_+/g, "__________");
+    // 剔除可能混入的答案标记
+    segment = segment.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]+\]?/g, "").trim();
+    segment = segment.replace(/\s{2,}/g, " ").trim();
     questions.push({ number: cur.num, text: segment });
   }
 
