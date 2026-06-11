@@ -7,7 +7,7 @@ import {
   Upload, FileText, Music, CheckCircle2, XCircle,
   ChevronLeft, ChevronRight, Save, Eye, Plus, Trash2,
   AlertCircle, Loader2, Headphones, BookOpen, PenTool, Mic,
-  ListOrdered, Settings
+  ListOrdered, Settings, Image
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -38,6 +38,8 @@ export default function AdminPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageBeforeQ, setImageBeforeQ] = useState<number>(1);
   const [selectedModule, setSelectedModule] = useState<IELTSModule>("listening");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -113,6 +115,15 @@ export default function AdminPage() {
     setAudioFile(file);
   }, []);
 
+  // 处理图片上传（地图等）
+  const handleImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setError("请上传图片文件（jpg, png 等）");
+      return;
+    }
+    setImageFile(file);
+  }, []);
+
   // 上传到 Supabase 并保存
   const handleSave = async () => {
     if (!parsed) return;
@@ -121,6 +132,7 @@ export default function AdminPage() {
 
     try {
       let audioUrl = "";
+      let imageUrl = "";
 
       if (audioFile) {
         const ext = audioFile.name.split(".").pop();
@@ -133,6 +145,21 @@ export default function AdminPage() {
         } else {
           const { data } = supabase.storage.from("exam-materials").getPublicUrl(audioPath);
           audioUrl = data.publicUrl;
+        }
+      }
+
+      // 上传图片（可选）
+      if (imageFile) {
+        const ext = imageFile.name.split(".").pop();
+        const imagePath = `images/${Date.now()}.${ext}`;
+        const { error: imgErr } = await supabase.storage
+          .from("exam-materials")
+          .upload(imagePath, imageFile);
+        if (imgErr) {
+          throw new Error(`图片上传失败：${imgErr.message}`);
+        } else {
+          const { data } = supabase.storage.from("exam-materials").getPublicUrl(imagePath);
+          imageUrl = data.publicUrl;
         }
       }
 
@@ -153,6 +180,8 @@ export default function AdminPage() {
         title: title.trim() || "IELTS Listening Test",
         description: description.trim(),
         audio_url: audioUrl,
+        image_url: imageUrl || null,
+        image_before_question: imageUrl ? imageBeforeQ : null,
         sections: finalSections,
         is_published: true,
         duration: 30,
@@ -492,7 +521,7 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <h2 className="font-semibold text-slate-800">听力音频</h2>
-                  <p className="text-xs text-slate-400">mp3 / wav / m4a 格式（可选）</p>
+                  <p className="text-xs text-slate-400">mp3 / wav / m4a 格式（必填）</p>
                 </div>
               </div>
 
@@ -517,6 +546,80 @@ export default function AdminPage() {
                   sublabel="支持 mp3, wav, m4a"
                   onFile={handleAudioFile}
                 />
+              )}
+            </div>
+
+            {/* 图片/地图上传（可选） */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <Image className="w-5 h-5 text-emerald-700" />
+                </div>
+                <div>
+                  <h2 className="font-semibold text-slate-800">地图 / 图片（可选）</h2>
+                  <p className="text-xs text-slate-400">如雅思听力地图题，上传后选择插入位置</p>
+                </div>
+              </div>
+
+              {!imageFile ? (
+                <UploadZone
+                  accept="image/*,.jpg,.jpeg,.png,.webp,.gif"
+                  icon={<Image className="w-8 h-8 text-emerald-400" />}
+                  label="点击上传图片（地图/示意图）"
+                  sublabel="支持 jpg, png, webp，可不传"
+                  onFile={handleImageFile}
+                />
+              ) : (
+                <div className="space-y-4">
+                  {/* 已选图片预览 */}
+                  <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span className="text-sm text-green-800 font-medium flex-1 truncate">
+                      {imageFile.name}
+                    </span>
+                    <button
+                      onClick={() => { setImageFile(null); setImageBeforeQ(1); }}
+                      className="text-slate-400 hover:text-red-500 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* 图片预览缩略图 */}
+                  <div className="rounded-xl overflow-hidden border border-slate-200 max-h-48">
+                    <img
+                      src={URL.createObjectURL(imageFile)}
+                      alt="预览"
+                      className="w-full object-contain max-h-48"
+                    />
+                  </div>
+
+                  {/* 选择插入位置 */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      📍 图片显示在第几题前面？
+                    </label>
+                    <p className="text-xs text-slate-400 mb-3">
+                      例如选择 15，则图片会显示在 Q15 的上方（适用于 Part 2 地图题等场景）
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={imageBeforeQ}
+                        onChange={e => setImageBeforeQ(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-24 px-3 py-2 border border-slate-200 rounded-xl text-sm font-medium text-center focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                      />
+                      <span className="text-sm text-slate-500">题之前</span>
+                    </div>
+                    {parsed && (
+                      <p className="text-xs text-slate-400 mt-2">
+                        当前试卷共 <strong>{parsed.sections.reduce((s, sec) => s + sec.questions.length, 0)}</strong> 道题，请输入有效题号。
+                      </p>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -576,6 +679,24 @@ export default function AdminPage() {
                   <div>
                     <p className="text-sm font-medium text-green-800">音频文件已就绪</p>
                     <p className="text-xs text-green-600 mt-1">{audioFile.name}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 图片状态提示 */}
+            {imageFile && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <Image className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-emerald-800">地图/图片已就绪</p>
+                    <p className="text-xs text-emerald-600 mt-1">
+                      {imageFile.name} — 将显示在 <strong>Q{imageBeforeQ}</strong> 前面
+                    </p>
+                    <div className="mt-2 rounded-lg overflow-hidden max-h-36 inline-block border border-emerald-200">
+                      <img src={URL.createObjectURL(imageFile)} alt="预览" className="max-h-36 object-contain" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -736,6 +857,8 @@ export default function AdminPage() {
                   setTitle("");
                   setDescription("");
                   setAudioFile(null);
+                  setImageFile(null);
+                  setImageBeforeQ(1);
                   setSavedId(null);
                 }}
                 className="px-6 py-3 rounded-xl border border-slate-300 text-slate-600 font-medium hover:bg-slate-50 transition"

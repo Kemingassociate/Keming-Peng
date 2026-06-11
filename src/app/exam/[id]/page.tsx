@@ -559,6 +559,8 @@ export default function ExamPage() {
           ...data,
           sections: data.sections || [],
           audioUrl: data.audio_url || "",
+          imageUrl: data.image_url || undefined,
+          imageBeforeQuestion: data.image_before_question || undefined,
         };
         setExam(parsed);
         setLoading(false);
@@ -757,20 +759,47 @@ export default function ExamPage() {
                 );
               }
               const q = item.q!;
-              return (
-                <div id={`q-row-${q.id}`} key={q.id}>
-                  <QuestionRow
-                    question={q}
-                    answerValue={answers[q.id] || ""}
-                    annotations={annotations}
-                    activeTool={activeTool}
-                    activeColor={activeColor}
-                    onAnswer={handleAnswer}
-                    onAddAnnotation={handleAddAnnotation}
-                    onRemoveAnnotation={(annId) => setAnnotations(prev => prev.filter(a => a.id !== annId))}
-                    submitted={submitted}
-                  />
+
+              // 在目标题号前插入地图/图片卡片
+              const imageCard = exam.imageUrl && exam.imageBeforeQuestion === q.number ? (
+                <div key={`map-image-${q.number}`} className="bg-white border-2 border-emerald-200 rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
+                      🗺️ 地图 / 示意图
+                    </span>
+                  </div>
+                  <div className="rounded-xl overflow-hidden border border-emerald-100">
+                    <img
+                      src={exam.imageUrl}
+                      alt="地图"
+                      className="w-full max-h-[400px] object-contain bg-white"
+                      onClick={() => window.open(exam.imageUrl, "_blank")}
+                      style={{ cursor: "zoom-in" }}
+                    />
+                  </div>
+                  <p className="text-xs text-emerald-600 mt-2 text-center">
+                    点击图片可放大查看
+                  </p>
                 </div>
+              ) : null;
+
+              return (
+                <>
+                  {imageCard}
+                  <div id={`q-row-${q.id}`} key={q.id}>
+                    <QuestionRow
+                      question={q}
+                      answerValue={answers[q.id] || ""}
+                      annotations={annotations}
+                      activeTool={activeTool}
+                      activeColor={activeColor}
+                      onAnswer={handleAnswer}
+                      onAddAnnotation={handleAddAnnotation}
+                      onRemoveAnnotation={(annId) => setAnnotations(prev => prev.filter(a => a.id !== annId))}
+                      submitted={submitted}
+                    />
+                  </div>
+                </>
               );
             });
           })()}

@@ -30,6 +30,10 @@ export interface Exam {
   module: IELTSModule; // 雅思模块
   audioUrl?: string;
   wordUrl?: string;
+  /** 地图/图片 URL（可选，如雅思听力地图题） */
+  imageUrl?: string;
+  /** 图片插入位置：在 第N题 前面显示（从1开始） */
+  imageBeforeQuestion?: number;
   duration?: number; // 分钟
   sections: ExamSection[];
   createdAt: string;
