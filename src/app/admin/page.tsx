@@ -199,9 +199,33 @@ export default function AdminPage() {
                 onFile={handleWordFile}
               />
 
-              <div className="mt-4 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 leading-relaxed">
-                <p className="font-semibold text-slate-600 mb-1">支持格式说明：</p>
-                <p>填空题格式：<code className="bg-slate-200 px-1 rounded">11__________</code> 在题目正文中，答案统一放在文档末尾，写上 <code className="bg-slate-200 px-1 rounded">答案：</code> 后每行一个答案。</p>
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs text-slate-600 leading-relaxed space-y-2">
+                <p className="font-semibold text-blue-800">✅ 支持两种标准格式：</p>
+                <div>
+                  <p className="font-medium mb-1">格式一（推荐）：答案嵌在题下方</p>
+                  <div className="bg-white rounded-lg p-3 font-mono text-xs space-y-1">
+                    <div>Located at the 11__________ of Marion Street.</div>
+                    <div className="text-green-700 font-bold">[答案：corner]</div>
+                    <div>Monday-Friday 12__________am to 9.30 pm</div>
+                    <div className="text-green-700 font-bold">[答案：6 OR six]</div>
+                  </div>
+                  <p className="mt-1 text-slate-500">答案用 <code className="bg-slate-200 px-1 rounded">[答案：]</code> 标记，多个答案用 <code className="bg-slate-200 px-1 rounded">/</code> 或 <code className="bg-slate-200 px-1 rounded">OR</code> 分隔。</p>
+                </div>
+                <div>
+                  <p className="font-medium mb-1">格式二：末尾统一答案区</p>
+                  <div className="bg-white rounded-lg p-3 font-mono text-xs space-y-1">
+                    <div>Located at the 11__________ of Marion Street.</div>
+                    <div>Monday-Friday 12__________am to 9.30 pm</div>
+                    <div className="text-green-700 font-bold mt-2">答案：</div>
+                    <div>11 corner</div>
+                    <div>12 six</div>
+                  </div>
+                  <p className="mt-1 text-slate-500">答案放在文档最末尾，以 <code className="bg-slate-200 px-1 rounded">答案：</code> 开头，每行一个。</p>
+                </div>
+                <div className="pt-1 border-t border-blue-200">
+                  <p className="font-medium">填空编号规则：</p>
+                  <p>用 <code className="bg-slate-200 px-1 rounded">11__________</code> 表示第 11 题下划线（5个下划线），编号从 1 开始连续，题目自动按每 10 题分一个 Part。</p>
+                </div>
               </div>
             </div>
 
