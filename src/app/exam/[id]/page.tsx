@@ -49,12 +49,12 @@ function AnnotationToolbar({
       ].map(({ tool, icon: Icon, label }) => (
         <button
           key={tool}
-          onClick={() => onTool(tool === "none" ? "none" : tool)}
+          onClick={() => onTool(tool)}
           title={label}
           className={clsx(
             "p-2 rounded-lg transition text-sm",
-            activeTool === tool && tool !== "none"
-              ? "bg-blue-100 text-blue-700 ring-1 ring-blue-300"
+            activeTool === tool
+              ? tool === "none" ? "bg-red-100 text-red-700 ring-1 ring-red-300" : "bg-blue-100 text-blue-700 ring-1 ring-blue-300"
               : "text-slate-500 hover:bg-slate-100"
           )}
         >
@@ -210,6 +210,7 @@ function QuestionRow({
   activeColor,
   onAnswer,
   onAddAnnotation,
+  onRemoveAnnotation,
   submitted,
 }: {
   question: Question;
@@ -219,6 +220,7 @@ function QuestionRow({
   activeColor: string;
   onAnswer: (qId: string, val: string) => void;
   onAddAnnotation: (a: Omit<Annotation, "id" | "createdAt">) => void;
+  onRemoveAnnotation: (annId: string) => void;
   submitted: boolean;
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -237,6 +239,13 @@ function QuestionRow({
         color: activeColor,
       });
       selection.removeAllRanges();
+    } else if ((activeTool as string) === "none") {
+      // 橡皮擦模式：选中文本后匹配并删除对应标注
+      const matched = qAnns.find(a => a.type !== "note" && a.content === text);
+      if (matched) {
+        onRemoveAnnotation(matched.id);
+        selection.removeAllRanges();
+      }
     } else if (activeTool === "note") {
       const note = notes[question.id] || "";
       const newNote = prompt("输入笔记内容：", note);
@@ -264,8 +273,8 @@ function QuestionRow({
       const idx = html.indexOf(ann.content);
       if (idx !== -1) {
         const tag = ann.type === "highlight"
-          ? `<mark style="background-color:${ann.color};border-radius:2px;padding:0 2px;">${ann.content}</mark>`
-          : `<mark style="text-decoration:line-through;background:none;color:inherit;">${ann.content}</mark>`;
+          ? `<mark data-ann-id="${ann.id}" style="background-color:${ann.color};border-radius:2px;padding:0 2px;cursor:pointer;">${ann.content}</mark>`
+          : `<mark data-ann-id="${ann.id}" style="text-decoration:line-through;background:none;color:inherit;cursor:pointer;">${ann.content}</mark>`;
         html = html.substring(0, idx) + tag + html.substring(idx + ann.content.length);
       }
     }
@@ -758,6 +767,7 @@ export default function ExamPage() {
                     activeColor={activeColor}
                     onAnswer={handleAnswer}
                     onAddAnnotation={handleAddAnnotation}
+                    onRemoveAnnotation={(annId) => setAnnotations(prev => prev.filter(a => a.id !== annId))}
                     submitted={submitted}
                   />
                 </div>
