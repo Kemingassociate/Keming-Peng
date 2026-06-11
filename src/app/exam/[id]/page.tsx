@@ -573,7 +573,11 @@ export default function ExamPage() {
           router.push("/");
           return;
         }
-        const parsed = { ...data, sections: data.sections || [] };
+        const parsed = {
+          ...data,
+          sections: data.sections || [],
+          audioUrl: data.audio_url || "",
+        };
         setExam(parsed);
         setLoading(false);
       });
@@ -705,12 +709,16 @@ export default function ExamPage() {
         </div>
       </header>
 
-      {/* 音频播放器 */}
-      {exam.audioUrl && (
-        <div className="max-w-7xl mx-auto px-4 pt-4 w-full">
+      {/* 音频播放器（始终显示，无音频时提示）*/}
+      <div className="max-w-7xl mx-auto px-4 pt-4 w-full">
+        {exam.audioUrl ? (
           <AudioPlayer src={exam.audioUrl} />
-        </div>
-      )}
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-sm text-amber-700 flex items-center gap-2">
+            ⚠️ 本试卷未配置音频文件
+          </div>
+        )}
+      </div>
 
       {/* 左右分栏主体 */}
       <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">

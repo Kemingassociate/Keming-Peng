@@ -81,7 +81,9 @@ function tryParseFormatC(rawText: string): ParsedDoc {
     seg = seg.replace(/(\d+)\s*_{5,}/g, "$1__________");
 
     // 剔除答案标记（格式C、H列答案、[答案：xxx] 等全部清除）
-    seg = seg.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]*\]?/gi, "").trim();
+    // 支持中英文冒号、有无方括号、前后空格
+    seg = seg.replace(/\s*\[?\s*(?:答(?:案)?|ANSWER)\s*[：:]+[^\]\.\n]*[\]]?/gi, "");
+    seg = seg.replace(/\s*\[[^\]]*(?:答(?:案)?|ANSWER)[^\]]*\]/gi, "");
     seg = seg.replace(/\s{2,}/g, " ").trim();
 
     return {
@@ -177,7 +179,9 @@ function tryParseFormatFormatA(rawText: string): ParsedDoc {
       .replace(/\s{2,}/g, " ")
       .trim();
     seg = seg.replace(/(\d+)\s*_{5,}/g, "$1__________");
-    seg = seg.replace(/\[?\s*答\s*案\s*[：:]?\s*[^\]\n]*\]?/gi, "").trim();
+    // 剔除答案标记（同格式C）
+    seg = seg.replace(/\s*\[?\s*(?:答(?:案)?|ANSWER)\s*[：:]+[^\]\.\n]*[\]]?/gi, "");
+    seg = seg.replace(/\s*\[[^\]]*(?:答(?:案)?|ANSWER)[^\]]*\]/gi, "");
     seg = seg.replace(/\s{2,}/g, " ").trim();
 
     return {
