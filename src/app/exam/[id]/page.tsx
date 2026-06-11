@@ -8,7 +8,7 @@ import {
   ChevronLeft, ChevronRight, Send, RotateCcw,
   Highlighter, Strikethrough, StickyNote, Eraser,
   Play, Pause, Volume2, SkipBack, SkipForward,
-  CheckCircle2, XCircle, Trophy
+  CheckCircle2, XCircle, Trophy, AlertCircle
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -522,6 +522,59 @@ function ScoreCard({
               </div>
             );
           })}
+        </div>
+
+        {/* ── 逐题解析 ── */}
+        <div className="mb-8">
+          <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" /> 逐题解析
+          </h3>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+            {detail.map(({ q, correct: ok, user }) => (
+              <div
+                key={q.id}
+                className={clsx(
+                  "rounded-xl p-4 border transition",
+                  ok
+                    ? "bg-green-50 border-green-200"
+                    : "bg-red-50 border-red-200"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {/* 题号 */}
+                    <span className="text-xs font-bold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 flex-shrink-0">
+                      Q{q.number}
+                    </span>
+                    {/* 正确 → ✅，错误 → 红色用户答案 */}
+                    {ok ? (
+                      <span className="text-green-600 font-medium text-sm flex items-center gap-1 flex-shrink-0">
+                        <CheckCircle2 className="w-4 h-4" /> 正确
+                      </span>
+                    ) : (
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-red-700 leading-relaxed break-words">
+                          你的答案：
+                          <strong className="ml-1 line-through decoration-red-400">
+                            {user || "（未作答）"}
+                          </strong>
+                        </p>
+                        <p className="text-xs text-green-700 mt-1.5 font-medium">
+                          ✓ 正确答案：<strong>{q.answer}</strong>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* 错误时显示题干（方便回顾）*/}
+                {!ok && (
+                  <p className="text-xs text-slate-500 mt-2 pl-12 border-t border-red-100 pt-2 leading-relaxed">
+                    {q.text.length > 120 ? q.text.slice(0, 120) + "..." : q.text}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* 按钮 */}
