@@ -200,27 +200,30 @@ function AudioPlayer({ src }: { src?: string }) {
 }
 
 // ============================================================
-//  题目面板（左）
+//  单行题目组件：题目 + 答题框在同一水平线
 // ============================================================
-function QuestionPanel({
-  section,
+function QuestionRow({
+  question,
+  answerValue,
   annotations,
   activeTool,
   activeColor,
+  onAnswer,
   onAddAnnotation,
   submitted,
 }: {
-  section: ExamSection;
+  question: Question;
+  answerValue: string;
   annotations: Annotation[];
   activeTool: ToolMode;
   activeColor: string;
+  onAnswer: (qId: string, val: string) => void;
   onAddAnnotation: (a: Omit<Annotation, "id" | "createdAt">) => void;
   submitted: boolean;
 }) {
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const highlightRefs = useRef<Record<string, HTMLSpanElement | null>>({});
 
-  const handleTextSelect = (qId: string) => {
+  const handleTextSelect = () => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || activeTool === "none") return;
     const text = selection.toString().trim();
@@ -229,229 +232,111 @@ function QuestionPanel({
     if (activeTool === "highlight" || activeTool === "strikethrough") {
       onAddAnnotation({
         type: activeTool,
-        questionId: qId,
+        questionId: question.id,
         content: text,
         color: activeColor,
       });
       selection.removeAllRanges();
     } else if (activeTool === "note") {
-      const note = notes[qId] || "";
+      const note = notes[question.id] || "";
       const newNote = prompt("输入笔记内容：", note);
       if (newNote !== null) {
-        setNotes(prev => ({ ...prev, [qId]: newNote }));
-        onAddAnnotation({ type: "note", questionId: qId, content: newNote, color: activeColor });
+        setNotes(prev => ({ ...prev, [question.id]: newNote }));
+        onAddAnnotation({ type: "note", questionId: question.id, content: newNote, color: activeColor });
       }
     }
   };
 
-  const getAnnotations = (qId: string) =>
-    annotations.filter(a => a.questionId === qId);
+  const qAnns = annotations.filter(a => a.questionId === question.id);
+  const isCorrect = submitted && answerValue.trim() !== "" && checkAnswer(answerValue, question.answer);
+  const isAnswered = submitted && answerValue.trim() !== "";
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Part 标题 */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-        <h2 className="text-xl font-bold text-slate-900">{section.title}</h2>
-        {section.instruction && (
-          <p className="text-slate-500 text-sm mt-2 leading-relaxed">
-            {section.instruction}
+    <div className={clsx(
+      "flex gap-4 items-start p-4 rounded-2xl border shadow-sm transition",
+      submitted && isCorrect && "border-green-300 bg-green-50/30",
+      submitted && !isCorrect && isAnswered && "border-red-300 bg-red-50/30",
+      !submitted && "bg-white border-slate-200"
+    )}>
+      {/* 左侧：题目文字 */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded flex-shrink-0">
+            Q{question.number}
+          </span>
+          {submitted && (
+            isCorrect
+              ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+              : isAnswered ? <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" /> : null
+          )}
+        </div>
+        <p
+          className={clsx(
+            "text-slate-800 leading-relaxed text-[15px] select-text",
+            activeTool !== "none" && !submitted && "cursor-crosshair"
+          )}
+          onMouseUp={() => handleTextSelect()}
+        >
+          {question.text}
+        </p>
+
+        {/* 高亮/划线标注 */}
+        {qAnns.filter(a => a.type !== "note").map(ann => (
+          <mark
+            key={ann.id}
+            className={clsx(
+              ann.type === "highlight" ? "rounded px-0.5" : "line-through",
+              "bg-opacity-50 mt-1 inline-block"
+            )}
+            style={{ backgroundColor: ann.color }}
+          >
+            {ann.content}
+          </mark>
+        ))}
+
+        {/* 笔记气泡 */}
+        {qAnns.filter(a => a.type === "note").map(ann => (
+          <div key={ann.id} className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            📝 {ann.content}
+          </div>
+        ))}
+
+        {/* 笔记输入框 */}
+        {activeTool === "note" && !submitted && (
+          <textarea
+            placeholder="输入笔记..."
+            className="mt-2 w-full text-xs border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
+            value={notes[question.id] || ""}
+            onChange={e => setNotes(prev => ({ ...prev, [question.id]: e.target.value }))}
+            rows={2}
+          />
+        )}
+
+        {/* 提交后显示正确答案（错误或未作答时）*/}
+        {submitted && !isCorrect && (
+          <p className="text-xs text-green-700 mt-2 font-medium">
+            ✓ 正确答案：<strong>{question.answer}</strong>
           </p>
         )}
-        <div className="flex gap-2 mt-3 flex-wrap">
-          {section.questions.map(q => (
-            <button
-              key={q.id}
-              className="w-9 h-9 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-700 transition"
-            >
-              {q.number}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* 信息行 + 每道题（按顺序交替渲染）*/}
-      {(() => {
-        const items: Array<{ type: "question" | "info"; q?: Question; info?: { id: string; text: string } }> = [];
-        let infoIdx = 0;
-        section.questions.forEach((q) => {
-          // 在每道题前插入一条信息行（如果有剩余）
-          if (infoIdx < (section.infoItems || []).length) {
-            items.push({ type: "info", info: (section.infoItems || [])[infoIdx++] });
-          }
-          items.push({ type: "question", q });
-        });
-        // 尾部剩余信息行
-        while (infoIdx < (section.infoItems || []).length) {
-          items.push({ type: "info", info: (section.infoItems || [])[infoIdx++] });
-        }
-
-        return items.map(item => {
-          if (item.type === "info" && item.info) {
-            return (
-              <div
-                key={item.info.id}
-                className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 shadow-sm"
-              >
-                <p className="text-sm text-slate-600 leading-relaxed select-text">
-                  {item.info.text}
-                </p>
-              </div>
-            );
-          }
-          const q = item.q!;
-          const qAnns = getAnnotations(q.id);
-          return (
-            <div
-              key={q.id}
-              className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <span className="text-sm font-semibold text-slate-400">
-                  Q{q.number}
-                </span>
-                {submitted && (
-                  <span className={clsx(
-                    "text-xs font-bold px-2 py-0.5 rounded-full",
-                    qAnns.some(a => a.type === "highlight")
-                      ? "bg-green-100 text-green-700"
-                      : "bg-slate-100 text-slate-500"
-                  )}>
-                    答案：{q.answer}
-                  </span>
-                )}
-              </div>
-
-              <p
-                className={clsx(
-                  "text-slate-800 leading-relaxed text-[15px] select-text",
-                  activeTool !== "none" && !submitted && "cursor-crosshair"
-                )}
-                onMouseUp={() => handleTextSelect(q.id)}
-              >
-                {q.text}
-              </p>
-
-            {/* 显示高亮/划线 */}
-            {qAnns.filter(a => a.type !== "note").map(ann => (
-              <mark
-                key={ann.id}
-                className={clsx(
-                  ann.type === "highlight" ? "rounded px-0.5" : "line-through",
-                  "bg-opacity-50"
-                )}
-                style={{ backgroundColor: ann.color }}
-              >
-                {ann.content}
-              </mark>
-            ))}
-
-            {/* 笔记气泡 */}
-            {qAnns.filter(a => a.type === "note").map(ann => (
-              <div
-                key={ann.id}
-                className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
-              >
-                📝 {ann.content}
-              </div>
-            ))}
-
-            {/* 笔记输入框（当前工具为笔记时） */}
-            {activeTool === "note" && !submitted && (
-              <textarea
-                placeholder="输入笔记..."
-                className="mt-2 w-full text-xs border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400"
-                value={notes[q.id] || ""}
-                onChange={e => setNotes(prev => ({ ...prev, [q.id]: e.target.value }))}
-                rows={2}
-              />
-            )}
-          </div>
-          );
-        })}
-      )()}
-    </div>
-  );
-}
-
-// ============================================================
-//  作答面板（右）
-// ============================================================
-function AnswerPanel({
-  section,
-  answers,
-  onAnswer,
-  submitted,
-  onToggle,
-}: {
-  section: ExamSection;
-  answers: Record<string, string>;
-  onAnswer: (qId: string, val: string) => void;
-  submitted: boolean;
-  onToggle: (qId: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm sticky top-20">
-        <h3 className="font-bold text-slate-800 text-sm mb-3">{section.title} · 作答区</h3>
-        <div className="text-xs text-slate-400">
-          {section.questions.length} 道题
-        </div>
+      {/* 右侧：答题框 */}
+      <div className="w-44 flex-shrink-0 pt-7">
+        <input
+          type="text"
+          value={answerValue}
+          onChange={e => !submitted && onAnswer(question.id, e.target.value)}
+          disabled={submitted}
+          placeholder={submitted ? "—" : "输入答案..."}
+          className={clsx(
+            "w-full text-sm px-3 py-2 rounded-xl border transition text-center",
+            "focus:outline-none focus:ring-2 focus:ring-blue-300",
+            submitted && isCorrect && "border-green-300 bg-white text-green-800 font-semibold",
+            submitted && !isCorrect && isAnswered && "border-red-300 bg-white text-red-800 line-through",
+            submitted && !isAnswered && "border-slate-300 bg-slate-50 text-slate-400"
+          )}
+        />
       </div>
-
-      {section.questions.map(q => {
-        const userAns = answers[q.id] || "";
-        const isCorrect = submitted && userAns.trim() !== "";
-        const correct = submitted && userAns.trim() !== "" && checkAnswer(userAns, q.answer);
-
-        return (
-          <div
-            key={q.id}
-            className={clsx(
-              "bg-white border rounded-2xl p-4 shadow-sm transition",
-              submitted && correct && "border-green-300 bg-green-50",
-              submitted && !correct && isCorrect && "border-red-300 bg-red-50",
-              !submitted && "border-slate-200"
-            )}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-slate-400">Q{q.number}</span>
-              {submitted && (
-                correct
-                  ? <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  : isCorrect
-                    ? <XCircle className="w-4 h-4 text-red-500" />
-                    : null
-              )}
-            </div>
-
-            <input
-              type="text"
-              value={userAns}
-              onChange={e => !submitted && onAnswer(q.id, e.target.value)}
-              disabled={submitted}
-              placeholder={submitted ? "" : "输入答案..."}
-              className={clsx(
-                "w-full text-sm px-3 py-2 rounded-xl border transition",
-                "focus:outline-none focus:ring-2 focus:ring-blue-300",
-                submitted && correct && "border-green-300 bg-white text-green-800",
-                submitted && !correct && isCorrect && "border-red-300 bg-white text-red-800 line-through",
-                submitted && !isCorrect && "border-slate-300 bg-slate-50 text-slate-400"
-              )}
-            />
-
-            {submitted && !correct && isCorrect && (
-              <p className="text-xs text-green-700 mt-1.5">
-                ✓ 正确答案：<strong>{q.answer}</strong>
-              </p>
-            )}
-            {submitted && !isCorrect && (
-              <p className="text-xs text-slate-500 mt-1.5">
-                你未作答此题
-              </p>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -802,37 +687,83 @@ export default function ExamPage() {
         )}
       </div>
 
-      {/* 左右分栏主体 */}
-      <div className="flex-1 max-w-7xl mx-auto w-full px-4 py-6">
-        <div className="flex gap-6 h-full">
-          {/* 左侧：题目 */}
-          <div className="flex-1 min-w-0">
-            <QuestionPanel
-              section={currentSection}
-              annotations={annotations}
-              activeTool={activeTool}
-              activeColor={activeColor}
-              onAddAnnotation={handleAddAnnotation}
-              submitted={submitted}
-            />
+      {/* 单列主体：每行一道题（题目+答题框同线）*/}
+      <div className="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+        {/* Part 标题卡片 */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm mb-4">
+          <h2 className="text-xl font-bold text-slate-900">{currentSection?.title}</h2>
+          {currentSection?.instruction && (
+            <p className="text-slate-500 text-sm mt-2 leading-relaxed">
+              {currentSection.instruction}
+            </p>
+          )}
+          <div className="flex gap-2 mt-3 flex-wrap">
+            {currentSection?.questions.map(q => (
+              <button
+                key={q.id}
+                onClick={() => {
+                  const el = document.getElementById(`q-row-${q.id}`);
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+                className="w-9 h-9 text-sm font-medium rounded-lg border border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-700 transition"
+              >
+                {q.number}
+              </button>
+            ))}
           </div>
+        </div>
 
-          {/* 右侧：作答 */}
-          <div className="w-80 flex-shrink-0">
-            <AnswerPanel
-              section={currentSection}
-              answers={answers}
-              onAnswer={handleAnswer}
-              submitted={submitted}
-              onToggle={() => {}}
-            />
-          </div>
+        {/* 信息行 + 题目列表 */}
+        <div className="flex flex-col gap-3">
+          {(() => {
+            const items: Array<{ type: "question" | "info"; q?: Question; info?: { id: string; text: string } }> = [];
+            let infoIdx = 0;
+            currentSection?.questions.forEach((q) => {
+              if (infoIdx < (currentSection.infoItems || []).length) {
+                items.push({ type: "info", info: (currentSection.infoItems || [])[infoIdx++] });
+              }
+              items.push({ type: "question", q });
+            });
+            while (infoIdx < (currentSection.infoItems || []).length) {
+              items.push({ type: "info", info: (currentSection.infoItems || [])[infoIdx++] });
+            }
+
+            return items.map(item => {
+              if (item.type === "info" && item.info) {
+                return (
+                  <div
+                    key={item.info.id}
+                    className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 shadow-sm"
+                  >
+                    <p className="text-sm text-slate-600 leading-relaxed select-text">
+                      {item.info.text}
+                    </p>
+                  </div>
+                );
+              }
+              const q = item.q!;
+              return (
+                <div id={`q-row-${q.id}`} key={q.id}>
+                  <QuestionRow
+                    question={q}
+                    answerValue={answers[q.id] || ""}
+                    annotations={annotations}
+                    activeTool={activeTool}
+                    activeColor={activeColor}
+                    onAnswer={handleAnswer}
+                    onAddAnnotation={handleAddAnnotation}
+                    submitted={submitted}
+                  />
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
 
       {/* Part 翻页 */}
       <div className="bg-white border-t border-slate-200 px-6 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
           <button
             onClick={() => setCurrentPart(p => Math.max(1, p - 1))}
             disabled={currentPart <= 1}
