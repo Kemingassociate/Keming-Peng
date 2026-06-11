@@ -733,19 +733,8 @@ export default function ExamPage() {
         {/* 信息行 + 题目列表 */}
         <div className="flex flex-col gap-3">
           {(() => {
-            const items: Array<{ type: "question" | "info"; q?: Question; info?: { id: string; text: string } }> = [];
-            let infoIdx = 0;
-            currentSection?.questions.forEach((q) => {
-              if (infoIdx < (currentSection.infoItems || []).length) {
-                items.push({ type: "info", info: (currentSection.infoItems || [])[infoIdx++] });
-              }
-              items.push({ type: "question", q });
-            });
-            while (infoIdx < (currentSection.infoItems || []).length) {
-              items.push({ type: "info", info: (currentSection.infoItems || [])[infoIdx++] });
-            }
-
-            return items.map(item => {
+            // 单个 item 渲染辅助函数（无地图时的普通行 / 地图前的普通行共用）
+            const renderItem = (item: { type: "question" | "info"; q?: Question; info?: { id: string; text: string } }) => {
               if (item.type === "info" && item.info) {
                 return (
                   <div
@@ -759,49 +748,120 @@ export default function ExamPage() {
                 );
               }
               const q = item.q!;
-
-              // 在目标题号前插入地图/图片卡片
-              const imageCard = exam.imageUrl && exam.imageBeforeQuestion === q.number ? (
-                <div key={`map-image-${q.number}`} className="bg-white border-2 border-emerald-200 rounded-2xl p-4 shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
-                      🗺️ 地图 / 示意图
-                    </span>
-                  </div>
-                  <div className="rounded-xl overflow-hidden border border-emerald-100">
-                    <img
-                      src={exam.imageUrl}
-                      alt="地图"
-                      className="w-full max-h-[400px] object-contain bg-white"
-                      onClick={() => window.open(exam.imageUrl, "_blank")}
-                      style={{ cursor: "zoom-in" }}
-                    />
-                  </div>
-                  <p className="text-xs text-emerald-600 mt-2 text-center">
-                    点击图片可放大查看
-                  </p>
+              return (
+                <div id={`q-row-${q.id}`} key={q.id}>
+                  <QuestionRow
+                    question={q}
+                    answerValue={answers[q.id] || ""}
+                    annotations={annotations}
+                    activeTool={activeTool}
+                    activeColor={activeColor}
+                    onAnswer={handleAnswer}
+                    onAddAnnotation={handleAddAnnotation}
+                    onRemoveAnnotation={(annId) => setAnnotations(prev => prev.filter(a => a.id !== annId))}
+                    submitted={submitted}
+                  />
                 </div>
-              ) : null;
+              );
+            };
+
+            const items: Array<{ type: "question" | "info"; q?: Question; info?: { id: string; text: string } }> = [];
+            let infoIdx = 0;
+            currentSection?.questions.forEach((q) => {
+              if (infoIdx < (currentSection.infoItems || []).length) {
+                items.push({ type: "info", info: (currentSection.infoItems || [])[infoIdx++] });
+              }
+              items.push({ type: "question", q });
+            });
+            while (infoIdx < (currentSection.infoItems || []).length) {
+              items.push({ type: "info", info: (currentSection.infoItems || [])[infoIdx++] });
+            }
+
+            // 检测是否有地图图片，如果有则使用左右分栏布局
+            const hasMapImage = !!exam.imageUrl && exam.imageBeforeQuestion;
+            const mapStartQ = exam.imageBeforeQuestion || 0;
+
+            // 将 items 按「地图前 / 地图题组 / 地图后」三段拆分
+            if (hasMapImage) {
+              const beforeMap: typeof items = [];
+              const mapGroup: typeof items = [];
+              const afterMap: typeof items = [];
+              let enteredMap = false;
+              let passedMap = false;
+
+              for (const item of items) {
+                if (!enteredMap && item.type === "question" && item.q && item.q.number >= mapStartQ) {
+                  enteredMap = true;
+                }
+                if (enteredMap && !passedMap && item.type === "question" && item.q && item.q.number > mapStartQ + 6) {
+                  // 地图题通常连续 4-8 题，超过范围后切到 afterMap
+                  // 更智能的判断：如果遇到 infoItem 且已经过了地图起始题一定数量
+                }
+                if (!enteredMap) {
+                  beforeMap.push(item);
+                } else {
+                  mapGroup.push(item);
+                }
+              }
 
               return (
                 <>
-                  {imageCard}
-                  <div id={`q-row-${q.id}`} key={q.id}>
-                    <QuestionRow
-                      question={q}
-                      answerValue={answers[q.id] || ""}
-                      annotations={annotations}
-                      activeTool={activeTool}
-                      activeColor={activeColor}
-                      onAnswer={handleAnswer}
-                      onAddAnnotation={handleAddAnnotation}
-                      onRemoveAnnotation={(annId) => setAnnotations(prev => prev.filter(a => a.id !== annId))}
-                      submitted={submitted}
-                    />
-                  </div>
+                  {/* 地图前的题目 */}
+                  {beforeMap.map(item => renderItem(item))}
+
+                  {/* 🗺️ 地图左右分栏区域 */}
+                  {mapGroup.length > 0 && (
+                    <div className="flex gap-5 items-start bg-white border-2 border-emerald-100 rounded-2xl p-5 shadow-sm">
+                      {/* 左侧：地图大图 */}
+                      <div className="w-[55%] flex-shrink-0">
+                        <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-inner">
+                          <img
+                            src={exam.imageUrl}
+                            alt="地图 / 示意图"
+                            className="w-full max-h-[520px] object-contain"
+                            onClick={() => window.open(exam.imageUrl, "_blank")}
+                            style={{ cursor: "zoom-in" }}
+                          />
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2 text-center">点击图片可放大</p>
+                      </div>
+
+                      {/* 右侧：题目列表 */}
+                      <div className="flex-1 min-w-0 flex flex-col gap-2.5">
+                        {mapGroup.map(item => {
+                          if (item.type === "info" && item.info) {
+                            return (
+                              <div key={item.info.id} className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 shadow-sm">
+                                <p className="text-sm text-slate-600 leading-relaxed select-text">{item.info.text}</p>
+                              </div>
+                            );
+                          }
+                          const q = item.q!;
+                          return (
+                            <div id={`q-row-${q.id}`} key={q.id}>
+                              <QuestionRow
+                                question={q}
+                                answerValue={answers[q.id] || ""}
+                                annotations={annotations}
+                                activeTool={activeTool}
+                                activeColor={activeColor}
+                                onAnswer={handleAnswer}
+                                onAddAnnotation={handleAddAnnotation}
+                                onRemoveAnnotation={(annId) => setAnnotations(prev => prev.filter(a => a.id !== annId))}
+                                submitted={submitted}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               );
-            });
+            }
+
+            // 无地图：正常渲染
+            return items.map(item => renderItem(item));
           })()}
         </div>
       </div>
