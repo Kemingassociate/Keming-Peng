@@ -306,6 +306,9 @@ async function parseExcel(file: File, isXls: boolean): Promise<ParsedDoc> {
   let started = false;
   const blankRe = /(\d{1,2})\s*_{5,}/;
 
+  // 信息行（无空白编号的非空行）— 用于保存说明/背景/选项文字等
+  const infoItems: { id: string; text: string; afterQuestion: number }[] = [];
+
   for (const row of rows) {
     const typeA = (row.A || "").toString().trim();
     const textB = (row.B || "").toString().trim();
@@ -348,6 +351,16 @@ async function parseExcel(file: File, isXls: boolean): Promise<ParsedDoc> {
         text: cleanText,
         answer: ans ? cleanAnswer(ans) : "",
       });
+    } else if (started && (textB || typeA)) {
+      // 非空但不含空白编号 → 信息行（说明/背景/选项等）
+      const infoText = textB || typeA;
+      if (infoText.length > 0 && infoText.length < 500) {
+        infoItems.push({
+          id: `info-${infoItems.length}`,
+          text: infoText,
+          afterQuestion: questions.length > 0 ? questions[questions.length - 1].number : 0,
+        });
+      }
     }
   }
 
@@ -357,10 +370,21 @@ async function parseExcel(file: File, isXls: boolean): Promise<ParsedDoc> {
 
   const sectionMap: Record<number, Question[]> = {};
   uniqueQs.forEach(q => { (sectionMap[q.part] ||= []).push(q); });
+
+  // 将信息行按 afterQuestion 分配到对应 section
+  const infoMap: Record<number, { id: string; text: string }[]> = {};
+  infoItems.forEach(info => {
+    // 找到 info.afterQuestion 所属的 part
+    const targetQ = uniqueQs.find(q => q.number === info.afterQuestion);
+    const targetPart = targetQ ? targetQ.part : 1;
+    (infoMap[targetPart] ||= []).push({ id: info.id, text: info.text });
+  });
+
   const sections: ExamSection[] = Object.entries(sectionMap).map(([part, qs]) => ({
     part: parseInt(part),
     title: `Part ${parseInt(part)}`,
     questions: qs,
+    infoItems: infoMap[parseInt(part)] || [],
   }));
 
   return { title, sections };

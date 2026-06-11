@@ -269,39 +269,67 @@ function QuestionPanel({
         </div>
       </div>
 
-      {/* 每道题 */}
-      {section.questions.map(q => {
-        const qAnns = getAnnotations(q.id);
-        return (
-          <div
-            key={q.id}
-            className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <span className="text-sm font-semibold text-slate-400">
-                Q{q.number}
-              </span>
-              {submitted && (
-                <span className={clsx(
-                  "text-xs font-bold px-2 py-0.5 rounded-full",
-                  qAnns.some(a => a.type === "highlight")
-                    ? "bg-green-100 text-green-700"
-                    : "bg-slate-100 text-slate-500"
-                )}>
-                  答案：{q.answer}
-                </span>
-              )}
-            </div>
+      {/* 信息行 + 每道题（按顺序交替渲染）*/}
+      {(() => {
+        const items: Array<{ type: "question" | "info"; q?: Question; info?: { id: string; text: string } }> = [];
+        let infoIdx = 0;
+        section.questions.forEach((q) => {
+          // 在每道题前插入一条信息行（如果有剩余）
+          if (infoIdx < (section.infoItems || []).length) {
+            items.push({ type: "info", info: (section.infoItems || [])[infoIdx++] });
+          }
+          items.push({ type: "question", q });
+        });
+        // 尾部剩余信息行
+        while (infoIdx < (section.infoItems || []).length) {
+          items.push({ type: "info", info: (section.infoItems || [])[infoIdx++] });
+        }
 
-            <p
-              className={clsx(
-                "text-slate-800 leading-relaxed text-[15px] select-text",
-                activeTool !== "none" && !submitted && "cursor-crosshair"
-              )}
-              onMouseUp={() => handleTextSelect(q.id)}
+        return items.map(item => {
+          if (item.type === "info" && item.info) {
+            return (
+              <div
+                key={item.info.id}
+                className="bg-blue-50/60 border border-blue-100 rounded-2xl p-4 shadow-sm"
+              >
+                <p className="text-sm text-slate-600 leading-relaxed select-text">
+                  {item.info.text}
+                </p>
+              </div>
+            );
+          }
+          const q = item.q!;
+          const qAnns = getAnnotations(q.id);
+          return (
+            <div
+              key={q.id}
+              className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm"
             >
-              {q.text}
-            </p>
+              <div className="flex items-start justify-between mb-3">
+                <span className="text-sm font-semibold text-slate-400">
+                  Q{q.number}
+                </span>
+                {submitted && (
+                  <span className={clsx(
+                    "text-xs font-bold px-2 py-0.5 rounded-full",
+                    qAnns.some(a => a.type === "highlight")
+                      ? "bg-green-100 text-green-700"
+                      : "bg-slate-100 text-slate-500"
+                  )}>
+                    答案：{q.answer}
+                  </span>
+                )}
+              </div>
+
+              <p
+                className={clsx(
+                  "text-slate-800 leading-relaxed text-[15px] select-text",
+                  activeTool !== "none" && !submitted && "cursor-crosshair"
+                )}
+                onMouseUp={() => handleTextSelect(q.id)}
+              >
+                {q.text}
+              </p>
 
             {/* 显示高亮/划线 */}
             {qAnns.filter(a => a.type !== "note").map(ann => (
@@ -338,8 +366,9 @@ function QuestionPanel({
               />
             )}
           </div>
-        );
-      })}
+          );
+        })}
+      )()}
     </div>
   );
 }

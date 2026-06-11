@@ -7,8 +7,8 @@ export interface Question {
   number: number;
   part: number;
   text: string;
-  type: "fill-blank" | "multiple-choice" | "true-false" | "short-answer";
-  answer: string; // 标准答案（支持 / 分隔多个答案）
+  type: "fill-blank" | "multiple-choice" | "true-false" | "short-answer" | "info";
+  answer: string; // 标准答案（支持 / 分隔多个答案）；info类型为空
   maxWords?: number;
 }
 
@@ -17,6 +17,8 @@ export interface ExamSection {
   title: string;
   instruction?: string;
   questions: Question[];
+  /** 信息行（无编号的说明/背景文字），按原始顺序穿插在questions中 */
+  infoItems?: { id: string; text: string }[];
 }
 
 export type IELTSModule = "listening" | "reading" | "writing" | "speaking";
