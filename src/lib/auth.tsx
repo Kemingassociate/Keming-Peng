@@ -115,10 +115,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Force clear even if API call fails
+    }
     setUser(null);
     setProfile(null);
     setSession(null);
+    // Force a full page reload to clear any cached state
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
   }, []);
 
   const refreshProfile = useCallback(async () => {

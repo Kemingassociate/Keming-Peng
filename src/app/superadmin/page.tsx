@@ -18,7 +18,7 @@ const ROLE_CONFIG: Record<UserRole, { label: string; color: string; bg: string; 
 const ROLE_ORDER: UserRole[] = ["superadmin", "admin", "student"];
 
 export default function SuperAdminPage() {
-  const { user, profile, isSuperadmin, loading: authLoading } = useAuth();
+  const { user, profile, isSuperadmin, signOut, loading: authLoading } = useAuth();
   const router = useRouter();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,7 +136,7 @@ export default function SuperAdminPage() {
             <a href="/admin" className="text-slate-500 hover:text-blue-700 transition">管理后台</a>
             <a href="/dashboard" className="text-slate-500 hover:text-blue-700 transition">学习记录</a>
             <button
-              onClick={() => supabase.auth.signOut().then(() => router.push("/"))}
+              onClick={() => signOut()}
               className="text-slate-500 hover:text-red-600 transition"
             >
               退出登录

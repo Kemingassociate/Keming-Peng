@@ -18,7 +18,7 @@ interface AttemptSummary {
 }
 
 export default function DashboardPage() {
-  const { user, profile, isStudent, loading: authLoading } = useAuth();
+  const { user, profile, isStudent, signOut, loading: authLoading } = useAuth();
   const router = useRouter();
   const [attempts, setAttempts] = useState<AttemptSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +104,7 @@ export default function DashboardPage() {
           <nav className="flex items-center gap-4 text-sm">
             <a href="/" className="text-slate-500 hover:text-blue-700 transition">首页</a>
             <button
-              onClick={() => supabase.auth.signOut().then(() => router.push("/"))}
+              onClick={() => signOut()}
               className="text-slate-500 hover:text-red-600 transition"
             >
               退出登录
