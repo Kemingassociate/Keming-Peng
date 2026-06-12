@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/lib/auth";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "IELTS Listening Mock — 雅思听力在线模考",
-  description: "上传 Word 文档，自动识别题目，雅思 9 分制在线批改",
+  title: "雅思分手大师 — IELTS Mock",
+  description: "雅思在线模考，自动批改，Band Score 评分",
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎧</text></svg>",
   },
@@ -15,7 +16,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" className={`${inter.variable} h-full`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </body>
     </html>
   );
 }

@@ -1,13 +1,14 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { parseDocx, checkAnswer } from "@/lib/docParser";
 import type { Exam, ParsedDoc, IELTSModule } from "@/types";
 import {
   Upload, FileText, Music, CheckCircle2, XCircle,
   ChevronLeft, ChevronRight, Save, Eye, Plus, Trash2,
   AlertCircle, Loader2, Headphones, BookOpen, PenTool, Mic,
-  ListOrdered, Settings, Image
+  ListOrdered, Settings, Image, ShieldAlert, LogOut
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -33,6 +34,7 @@ interface ExamListItem {
 }
 
 export default function AdminPage() {
+  const { user, isAdmin, loading: authLoading, signOut } = useAuth();
   const [step, setStep] = useState<Step>("upload");
   const [parsed, setParsed] = useState<ParsedDoc | null>(null);
   const [title, setTitle] = useState("");
@@ -349,6 +351,35 @@ export default function AdminPage() {
   // ================================================
   //  默认视图：上传流程（原有逻辑 + 模块选择）
   // ================================================
+
+  // Auth guard (after all hooks)
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-800" />
+      </div>
+    );
+  }
+  if (!user || !isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 via-white to-slate-50 px-4">
+        <div className="text-center">
+          <ShieldAlert className="w-16 h-16 text-red-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-black text-slate-900 mb-2">无权访问</h1>
+          <p className="text-slate-500 mb-6">此页面仅限管理员访问</p>
+          <div className="flex items-center justify-center gap-4">
+            <a href="/" className="px-6 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-medium hover:bg-slate-200 transition">
+              返回首页
+            </a>
+            <a href="/login" className="px-6 py-2.5 bg-blue-800 text-white rounded-xl font-medium hover:bg-blue-900 transition">
+              登录
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* 顶部导航 */}
@@ -365,7 +396,13 @@ export default function AdminPage() {
             >
               <ListOrdered className="w-3.5 h-3.5" /> 管理试卷
             </button>
-            <span className="text-xs text-slate-400">管理员面板</span>
+            <span className="text-xs text-slate-400">{user?.email}</span>
+            <button
+              onClick={() => signOut()}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-red-500 bg-red-50 rounded-lg hover:bg-red-100 transition"
+            >
+              <LogOut className="w-3.5 h-3.5" /> 退出
+            </button>
           </div>
         </div>
       </header>

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import { calcBandScore, getBandLabel, checkAnswer } from "@/lib/docParser";
 import type { Exam, ExamSection, Question, UserAnswer, Annotation } from "@/types";
 import {
@@ -532,6 +533,7 @@ function ScoreCard({
 export default function ExamPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { user: authUser } = useAuth();
 
   const [exam, setExam] = useState<Exam | null>(null);
   const [loading, setLoading] = useState(true);
@@ -621,6 +623,7 @@ export default function ExamPage() {
     ).length;
     supabase.from("attempts").insert({
       exam_id: id,
+      user_id: authUser?.id || null,
       answers: Object.entries(answers).map(([question_id, answer]) => ({
         question_id,
         answer,

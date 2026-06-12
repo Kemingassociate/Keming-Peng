@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/auth";
 import type { Exam, IELTSModule } from "@/types";
 import {
   Headphones, Clock, FileText, ArrowRight, BookOpen,
-  Mic, PenTool, MessageSquare
+  Mic, PenTool, LogIn, LogOut, LayoutDashboard, Settings
 } from "lucide-react";
 
 const MODULES: { key: IELTSModule; label: string; icon: React.ReactNode; color: string; bg: string; desc: string }[] = [
@@ -43,6 +44,7 @@ const MODULES: { key: IELTSModule; label: string; icon: React.ReactNode; color: 
 ];
 
 export default function HomePage() {
+  const { user, profile, isAdmin, isStudent, signOut } = useAuth();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeModule, setActiveModule] = useState<IELTSModule>("listening");
@@ -67,7 +69,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* 顶部导航 */}
+      {/* 顶部导航 — Auth-aware */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -78,11 +80,42 @@ export default function HomePage() {
               IELTS Mock
             </span>
           </div>
-          <nav className="flex items-center gap-6 text-sm">
+          <nav className="flex items-center gap-4 text-sm">
             <a href="/" className="text-blue-700 font-medium">首页</a>
-            <a href="/admin" className="text-slate-500 hover:text-slate-900 transition">
-              上传题目
-            </a>
+            {isAdmin && (
+              <a href="/admin" className="text-slate-500 hover:text-slate-900 transition flex items-center gap-1">
+                <Settings className="w-3.5 h-3.5" />
+                管理后台
+              </a>
+            )}
+            {user ? (
+              <>
+                {isStudent && (
+                  <a href="/dashboard" className="text-slate-500 hover:text-blue-700 transition flex items-center gap-1">
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    学习记录
+                  </a>
+                )}
+                <span className="text-slate-400 hidden sm:inline">
+                  {profile?.full_name || user.email?.split("@")[0]}
+                </span>
+                <button
+                  onClick={() => signOut()}
+                  className="text-slate-500 hover:text-red-600 transition flex items-center gap-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  退出
+                </button>
+              </>
+            ) : (
+              <a
+                href="/login"
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-800 text-white rounded-xl font-medium hover:bg-blue-900 transition shadow-sm"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                登录
+              </a>
+            )}
           </nav>
         </div>
       </header>
@@ -101,6 +134,22 @@ export default function HomePage() {
             广东外语外贸大学国际学院<br />
             雅思，拜拜了您内
           </p>
+          {!user && (
+            <div className="mt-8 flex items-center justify-center gap-4">
+              <a
+                href="/register"
+                className="px-8 py-3 bg-white text-blue-900 rounded-xl font-bold hover:bg-blue-50 transition shadow-lg"
+              >
+                免费注册
+              </a>
+              <a
+                href="/login"
+                className="px-8 py-3 border-2 border-white/30 text-white rounded-xl font-medium hover:bg-white/10 transition"
+              >
+                登录
+              </a>
+            </div>
+          )}
         </div>
       </section>
 
@@ -163,17 +212,19 @@ export default function HomePage() {
             </div>
             <h3 className="text-xl font-semibold text-slate-700 mb-2">暂无{activeConfig.label.split(" ")[0]}试卷</h3>
             <p className="text-slate-500 mb-6">管理员上传{activeConfig.label.split(" ")[0]}题目后，这里将显示可用试卷</p>
-            <a
-              href="/admin"
-              className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-white transition ${
-                activeModule === "listening" ? "bg-blue-700 hover:bg-blue-800" :
-                activeModule === "reading" ? "bg-emerald-700 hover:bg-emerald-800" :
-                activeModule === "writing" ? "bg-orange-600 hover:bg-orange-700" :
-                "bg-purple-700 hover:bg-purple-800"
-              }`}
-            >
-              去上传题目 <ArrowRight className="w-4 h-4" />
-            </a>
+            {isAdmin && (
+              <a
+                href="/admin"
+                className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-white transition ${
+                  activeModule === "listening" ? "bg-blue-700 hover:bg-blue-800" :
+                  activeModule === "reading" ? "bg-emerald-700 hover:bg-emerald-800" :
+                  activeModule === "writing" ? "bg-orange-600 hover:bg-orange-700" :
+                  "bg-purple-700 hover:bg-purple-800"
+                }`}
+              >
+                去上传题目 <ArrowRight className="w-4 h-4" />
+              </a>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
