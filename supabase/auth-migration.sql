@@ -46,6 +46,22 @@ CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE
   USING (auth.uid() = id);
 
+-- Superadmins can update any profile (role management)
+CREATE POLICY "Superadmins can update any profile"
+  ON public.profiles FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'superadmin'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'superadmin'
+    )
+  );
+
 -- Only superadmins can delete profiles
 CREATE POLICY "Only superadmins can delete profiles"
   ON public.profiles FOR DELETE
